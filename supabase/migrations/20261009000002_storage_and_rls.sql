@@ -142,27 +142,52 @@ REVOKE EXECUTE ON FUNCTION public.safe_folder_uuid(TEXT) FROM anon, public;
 -- 4. Triggers for Column-Level Integrity & Anti-Tampering
 -- -------------------------------------------------------------
 
--- Trigger function: Enforce milestone update constraints on contractors
+-- Trigger function: Enforce profile update constraints (Anti-Privilege-Escalation)
+CREATE OR REPLACE FUNCTION public.check_profile_role_update()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Prevent users from escalating to admin_inspector or altering role unless caller is an admin_inspector
+    IF NEW.role IS DISTINCT FROM OLD.role THEN
+        IF NOT public.is_inspector() THEN
+            RAISE EXCEPTION 'Unauthorized: Users cannot change their own role or promote themselves to admin_inspector.';
+        END IF;
+    END IF;
+    -- Prevent changing profile ID
+    IF NEW.id IS DISTINCT FROM OLD.id THEN
+        RAISE EXCEPTION 'Profile ID cannot be modified.';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+DROP TRIGGER IF EXISTS trg_check_profile_role_update ON public.profiles;
+CREATE TRIGGER trg_check_profile_role_update
+    BEFORE UPDATE ON public.profiles
+    FOR EACH ROW
+    EXECUTE FUNCTION public.check_profile_role_update();
+
+-- Trigger function: Enforce milestone update constraints on contractors (NULL-Safe)
 CREATE OR REPLACE FUNCTION public.check_milestone_contractor_update()
 RETURNS TRIGGER AS $$
 BEGIN
     IF NOT public.is_inspector() THEN
         -- Contractors cannot alter baseline configuration
-        IF NEW.project_id <> OLD.project_id OR
-           NEW.title <> OLD.title OR
-           NEW.sequence_order <> OLD.sequence_order OR
-           NEW.weight_percentage <> OLD.weight_percentage OR
-           NEW.target_date <> OLD.target_date THEN
+        IF NEW.project_id IS DISTINCT FROM OLD.project_id OR
+           NEW.title IS DISTINCT FROM OLD.title OR
+           NEW.description IS DISTINCT FROM OLD.description OR
+           NEW.sequence_order IS DISTINCT FROM OLD.sequence_order OR
+           NEW.weight_percentage IS DISTINCT FROM OLD.weight_percentage OR
+           NEW.target_date IS DISTINCT FROM OLD.target_date THEN
             RAISE EXCEPTION 'Contractors are not authorized to modify milestone configuration or baseline criteria.';
         END IF;
 
-        -- Contractors can only advance status between pending, in_progress, and submitted
+        -- Contractors can only transition status between pending, in_progress, and submitted
         IF NEW.status NOT IN ('pending', 'in_progress', 'submitted') THEN
             RAISE EXCEPTION 'Contractors cannot set milestone status to %', NEW.status;
         END IF;
 
-        -- Contractors cannot modify verified or rejected milestones
-        IF OLD.status IN ('verified', 'rejected') AND NEW.status <> OLD.status THEN
+        -- Contractors cannot reopen or alter verified or rejected milestones
+        IF OLD.status IN ('verified', 'rejected') AND NEW.status IS DISTINCT FROM OLD.status THEN
             RAISE EXCEPTION 'Contractors cannot reopen or alter verified/rejected milestones.';
         END IF;
     END IF;
@@ -176,20 +201,21 @@ CREATE TRIGGER trg_check_milestone_update
     FOR EACH ROW
     EXECUTE FUNCTION public.check_milestone_contractor_update();
 
--- Trigger function: Enforce material record update constraints on contractors
+-- Trigger function: Enforce material record update constraints on contractors (NULL-Safe)
 CREATE OR REPLACE FUNCTION public.check_material_record_update()
 RETURNS TRIGGER AS $$
 BEGIN
     IF NOT public.is_inspector() THEN
         -- Contractors cannot alter baseline quantities, units, rates, or financial fields
-        IF NEW.project_id <> OLD.project_id OR
-           NEW.milestone_id <> OLD.milestone_id OR
-           NEW.material_name <> OLD.material_name OR
-           NEW.unit <> OLD.unit OR
-           NEW.planned_qty <> OLD.planned_qty OR
-           NEW.unit_rate <> OLD.unit_rate OR
-           NEW.ordered_qty <> OLD.ordered_qty OR
-           NEW.paid_qty <> OLD.paid_qty THEN
+        IF NEW.project_id IS DISTINCT FROM OLD.project_id OR
+           NEW.milestone_id IS DISTINCT FROM OLD.milestone_id OR
+           NEW.material_name IS DISTINCT FROM OLD.material_name OR
+           NEW.unit IS DISTINCT FROM OLD.unit OR
+           NEW.planned_qty IS DISTINCT FROM OLD.planned_qty OR
+           NEW.unit_rate IS DISTINCT FROM OLD.unit_rate OR
+           NEW.ordered_qty IS DISTINCT FROM OLD.ordered_qty OR
+           NEW.billed_qty IS DISTINCT FROM OLD.billed_qty OR
+           NEW.paid_qty IS DISTINCT FROM OLD.paid_qty THEN
             RAISE EXCEPTION 'Contractors may only update delivered or consumed quantities on material records.';
         END IF;
     END IF;
@@ -204,7 +230,7 @@ CREATE TRIGGER trg_check_material_record_update
     EXECUTE FUNCTION public.check_material_record_update();
 
 -- -------------------------------------------------------------
--- 5. RLS Policies: Profiles (Recursion-Free)
+-- 5. RLS Policies: Profiles
 -- -------------------------------------------------------------
 DROP POLICY IF EXISTS "Users can view member profiles" ON public.profiles;
 DROP POLICY IF EXISTS "Users can view all member profiles" ON public.profiles;
@@ -230,14 +256,7 @@ CREATE POLICY "Users can update own profile"
     ON public.profiles FOR UPDATE
     TO authenticated
     USING (auth.uid() = id)
-    WITH CHECK (
-        auth.uid() = id
-        AND (
-            -- Anti-escalation: role cannot change unless already inspector
-            role = public.get_current_user_role()
-            OR public.is_inspector()
-        )
-    );
+    WITH CHECK (auth.uid() = id);
 
 CREATE POLICY "Inspectors can manage all profiles"
     ON public.profiles FOR ALL
