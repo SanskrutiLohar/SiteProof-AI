@@ -3,7 +3,7 @@ import {
   detectDuplicateInvoice, 
   generateIdempotencyKey 
 } from '../lib/integrityEngine.ts';
-import { DEMO_PERSONAS } from '../context/AuthContext.tsx';
+import { DEMO_PERSONAS } from '../lib/constants.ts';
 import { INITIAL_PROJECTS, INITIAL_MILESTONES, INITIAL_BOQ_ITEMS } from '../lib/seedData.ts';
 import { generateSampleEvidenceForMilestone } from '../lib/sampleEvidence.ts';
 

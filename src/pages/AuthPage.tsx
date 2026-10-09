@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth, DEMO_PERSONAS } from '../context/AuthContext.tsx';
+import { useAuth } from '../context/AuthContext.tsx';
+import { DEMO_PERSONAS } from '../lib/constants.ts';
 import { UserRole } from '../types/index.ts';
 import { 
   Building2, 

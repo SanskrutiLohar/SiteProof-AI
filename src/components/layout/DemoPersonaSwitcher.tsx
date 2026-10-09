@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { useAuth, DEMO_PERSONAS } from '../../context/AuthContext.tsx';
+import { useAuth } from '../../context/AuthContext.tsx';
+import { DEMO_PERSONAS } from '../../lib/constants.ts';
 import { ShieldCheck, HardHat, ChevronDown, Check } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
