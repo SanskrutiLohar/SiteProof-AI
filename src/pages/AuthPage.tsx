@@ -33,10 +33,11 @@ export const AuthPage: React.FC = () => {
     setSubmitting(true);
     try {
       if (isLogin) {
-        await signIn(email || 'inspector@siteproof.ai', selectedRole);
+        await signIn(email || 'inspector@siteproof.ai', password || 'Password123!', selectedRole);
       } else {
         await signUp(
           email, 
+          password || 'Password123!',
           fullName || 'New User', 
           selectedRole, 
           organization || 'Construction Engineering'
@@ -44,7 +45,7 @@ export const AuthPage: React.FC = () => {
       }
       navigate(selectedRole === 'admin_inspector' ? '/admin/dashboard' : '/contractor/dashboard');
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : 'Authentication failed');
+      setErrorMsg(err instanceof Error ? err.message : 'Authentication failed. Please check credentials.');
     } finally {
       setSubmitting(false);
     }

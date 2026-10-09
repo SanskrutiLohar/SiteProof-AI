@@ -36,6 +36,7 @@ export interface Milestone {
   weight_percentage: number;
   target_date: string;
   status: MilestoneStatus;
+  version?: number; // Optimistic Concurrency Control
   boq_items?: BOQItem[];
   created_at?: string;
 }
@@ -65,11 +66,23 @@ export interface EvidenceItem {
   file_url: string;
   file_name: string;
   file_size?: number;
+  sha256_hash?: string;
+  perceptual_hash?: string;
   latitude?: number;
   longitude?: number;
   location_name?: string;
   captured_at?: string;
   uploaded_at: string;
+  status?: 
+    | 'UPLOAD_PENDING'
+    | 'UPLOAD_FAILED'
+    | 'PROCESSING_PENDING'
+    | 'PROCESSING_FAILED'
+    | 'VERIFICATION_COMPLETE'
+    | 'NEEDS_REVIEW'
+    | 'APPROVED'
+    | 'REJECTED'
+    | 'MORE_EVIDENCE_REQUIRED';
   ai_analyzed?: boolean;
   ai_summary?: string;
   ai_confidence?: number;

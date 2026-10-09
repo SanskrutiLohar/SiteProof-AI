@@ -26,8 +26,8 @@ interface AuthContextType {
   role: UserRole;
   isLoading: boolean;
   isDemoMode: boolean;
-  signIn: (email: string, role?: UserRole) => Promise<void>;
-  signUp: (email: string, fullName: string, role: UserRole, organization?: string) => Promise<void>;
+  signIn: (email: string, password?: string, preferredRole?: UserRole) => Promise<void>;
+  signUp: (email: string, password?: string, fullName?: string, role?: UserRole, organization?: string) => Promise<void>;
   signOut: () => Promise<void>;
   switchDemoPersona: (role: UserRole) => void;
 }
@@ -41,10 +41,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         return JSON.parse(saved);
       } catch {
-        return DEMO_PERSONAS.admin_inspector;
+        return null;
       }
     }
-    return DEMO_PERSONAS.admin_inspector;
+    return null; // Start unauthenticated so app lands on Login page
   });
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -68,14 +68,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const checkSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user && !profile?.id.startsWith('demo-')) {
-          const { data: userProfile } = await supabase
+        if (session?.user && (!profile || !profile.id.startsWith('demo-'))) {
+          const { data: userProfile, error } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', session.user.id)
             .single();
 
-          if (userProfile) {
+          if (!error && userProfile) {
             setProfile(userProfile as UserProfile);
           }
         }
@@ -89,7 +89,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user && !profile?.id.startsWith('demo-')) {
+      if (session?.user && (!profile || !profile.id.startsWith('demo-'))) {
         const { data: userProfile } = await supabase
           .from('profiles')
           .select('*')
@@ -98,6 +98,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (userProfile) {
           setProfile(userProfile as UserProfile);
+        }
+      } else if (!session) {
+        // If logged out from Supabase, clear profile if not in explicit demo mode
+        if (profile && !profile.id.startsWith('demo-')) {
+          setProfile(null);
         }
       }
     });
@@ -112,59 +117,138 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setProfile(targetPersona);
   };
 
-  const signIn = async (email: string, preferredRole: UserRole = 'admin_inspector') => {
+  const signIn = async (
+    email: string,
+    password = 'Password123!',
+    preferredRole: UserRole = 'admin_inspector'
+  ) => {
     setIsLoading(true);
+
     if (!isSupabaseConfigured) {
-      const persona = Object.values(DEMO_PERSONAS).find(p => p.email.toLowerCase() === email.toLowerCase()) 
-        || DEMO_PERSONAS[preferredRole];
+      // In offline/demo mode, match existing persona or preferred role
+      const persona =
+        Object.values(DEMO_PERSONAS).find(
+          (p) => p.email.toLowerCase() === email.toLowerCase()
+        ) || {
+          ...DEMO_PERSONAS[preferredRole],
+          email,
+        };
       setProfile(persona);
       setIsLoading(false);
       return;
     }
 
-    // In live Supabase mode, standard login
+    // Live Supabase Authentication
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
-        password: 'Password123!',
+        password,
       });
+
       if (error) throw error;
+
       if (data.user) {
         const { data: userProfile } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', data.user.id)
           .single();
-        if (userProfile) setProfile(userProfile as UserProfile);
+
+        if (userProfile) {
+          setProfile(userProfile as UserProfile);
+        } else {
+          // Create basic profile if none exists
+          const fallbackProfile: UserProfile = {
+            id: data.user.id,
+            email: data.user.email || email,
+            full_name: data.user.user_metadata?.full_name || email.split('@')[0],
+            role: (data.user.user_metadata?.role as UserRole) || preferredRole,
+            organization: data.user.user_metadata?.organization || 'Construction Management',
+            created_at: new Date().toISOString(),
+          };
+          await supabase.from('profiles').insert([fallbackProfile]);
+          setProfile(fallbackProfile);
+        }
       }
-    } catch {
-      // Fallback for demonstration
-      setProfile(DEMO_PERSONAS[preferredRole]);
+    } catch (err) {
+      setIsLoading(false);
+      throw err;
     } finally {
       setIsLoading(false);
     }
   };
 
-  const signUp = async (email: string, fullName: string, role: UserRole, organization = 'Independent Construction') => {
+  const signUp = async (
+    email: string,
+    password = 'Password123!',
+    fullName = 'New User',
+    role: UserRole = 'contractor',
+    organization = 'Independent Construction'
+  ) => {
     setIsLoading(true);
-    const newProfile: UserProfile = {
-      id: `usr-${Date.now()}`,
-      email,
-      full_name: fullName,
-      role,
-      organization,
-      avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`,
-      created_at: new Date().toISOString(),
-    };
-    setProfile(newProfile);
-    setIsLoading(false);
+
+    if (!isSupabaseConfigured) {
+      const newProfile: UserProfile = {
+        id: `demo-${Date.now()}`,
+        email,
+        full_name: fullName,
+        role,
+        organization,
+        avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`,
+        created_at: new Date().toISOString(),
+      };
+      setProfile(newProfile);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+            role,
+            organization,
+          },
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        const newProfile: UserProfile = {
+          id: data.user.id,
+          email,
+          full_name: fullName,
+          role,
+          organization,
+          avatar_url: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`,
+          created_at: new Date().toISOString(),
+        };
+
+        await supabase.from('profiles').insert([newProfile]);
+        setProfile(newProfile);
+      }
+    } catch (err) {
+      setIsLoading(false);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const signOut = async () => {
     if (isSupabaseConfigured) {
-      await supabase.auth.signOut();
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.warn('Signout warning:', err);
+      }
     }
     setProfile(null);
+    localStorage.removeItem('siteproof_active_profile');
   };
 
   const role: UserRole = profile?.role || 'contractor';

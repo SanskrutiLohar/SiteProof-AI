@@ -32,9 +32,9 @@ export const InspectorDecisionModal: React.FC<InspectorDecisionModalProps> = ({
 }) => {
   const { profile } = useAuth();
   const { 
-    updateMilestoneStatus, 
     getMilestoneDiscrepancies,
-    resolveDiscrepancy 
+    resolveDiscrepancy,
+    recordMilestoneDecision
   } = useProjects();
 
   const [decisionType, setDecisionType] = useState<'approve' | 'reject' | 'request_evidence'>('approve');
@@ -110,21 +110,8 @@ export const InspectorDecisionModal: React.FC<InspectorDecisionModalProps> = ({
         openCriticalFlags.forEach(f => resolveDiscrepancy(f.id));
       }
 
-      // Update milestone status
-      if (decisionType === 'approve') {
-        updateMilestoneStatus(milestoneId, 'verified');
-      } else if (decisionType === 'reject') {
-        updateMilestoneStatus(milestoneId, 'rejected');
-      } else {
-        // Request evidence: keeps in_progress or resets to in_progress
-        updateMilestoneStatus(milestoneId, 'in_progress');
-      }
-
-      // Store decision in localStorage
-      const savedDecisions = localStorage.getItem('siteproof_decisions');
-      const allDecisions: MilestoneDecision[] = savedDecisions ? JSON.parse(savedDecisions) : [];
-      allDecisions.push(decisionData);
-      localStorage.setItem('siteproof_decisions', JSON.stringify(allDecisions));
+      // Record official inspector decision and audit log
+      recordMilestoneDecision(decisionData);
 
       setIsSubmitting(false);
       if (onSuccess) onSuccess();

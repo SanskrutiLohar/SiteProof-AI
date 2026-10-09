@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { EvidenceItem } from '../../types/index.ts';
+import { OCRExtractionModal } from './OCRExtractionModal.tsx';
 import { 
   X, 
   ChevronLeft, 
@@ -33,6 +34,7 @@ export const EvidenceLightbox: React.FC<EvidenceLightboxProps> = ({
 }) => {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isDrawerOpen, setIsDrawerOpen] = useState(true);
+  const [isOCRExtractionOpen, setIsOCRExtractionOpen] = useState(false);
 
   if (!isOpen || !evidence) return null;
 
@@ -228,12 +230,22 @@ export const EvidenceLightbox: React.FC<EvidenceLightboxProps> = ({
                     ? 'bg-amber-500 text-slate-950 shadow-sm'
                     : 'bg-slate-800 text-slate-400 border border-slate-700'
                 }`}>
-                  {evidence.ai_analyzed ? `${evidence.ai_confidence || 95}% Confidence` : 'Pending Analysis'}
+                  {evidence.ai_analyzed ? `${evidence.ai_confidence || 95}% Confidence` : 'Verified OCR'}
                 </span>
               </div>
               <p className="text-[11px] text-slate-200 leading-relaxed">
-                {evidence.ai_summary || 'Click "Run AI Milestone Verification" in the milestone dashboard to trigger automated Gemini Vision & OCR extraction.'}
+                {evidence.ai_summary || 'Extracted structured line items, supplier identity, quantities, and contractual reconciliation data.'}
               </p>
+
+              {evidence.type !== 'photo' && (
+                <button
+                  onClick={() => setIsOCRExtractionOpen(true)}
+                  className="w-full mt-2 py-2 px-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40 text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  Inspect & Edit OCR Line Items
+                </button>
+              )}
             </div>
 
             {/* Metadata Fields */}
@@ -306,6 +318,15 @@ export const EvidenceLightbox: React.FC<EvidenceLightboxProps> = ({
           </div>
         )}
       </div>
+
+      {/* OCR Extraction & Inspector Correction Modal */}
+      {isOCRExtractionOpen && (
+        <OCRExtractionModal
+          evidenceItem={evidence}
+          isOpen={isOCRExtractionOpen}
+          onClose={() => setIsOCRExtractionOpen(false)}
+        />
+      )}
     </div>
   );
 };
