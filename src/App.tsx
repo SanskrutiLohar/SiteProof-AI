@@ -7,6 +7,7 @@ import { ProtectedRoute } from './components/layout/ProtectedRoute.tsx';
 import { AuthPage } from './pages/AuthPage.tsx';
 import { AdminDashboard } from './pages/admin/AdminDashboard.tsx';
 import { ProjectDetailsPage } from './pages/admin/ProjectDetailsPage.tsx';
+import { InspectorVerificationCockpit } from './pages/admin/InspectorVerificationCockpit.tsx';
 import { ContractorDashboard } from './pages/contractor/ContractorDashboard.tsx';
 import { ContractorMilestonePage } from './pages/contractor/ContractorMilestonePage.tsx';
 
@@ -45,6 +46,14 @@ export const App: React.FC = () => {
                   element={
                     <ProtectedRoute allowedRoles={['admin_inspector']}>
                       <ProjectDetailsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/verify/:milestoneId"
+                  element={
+                    <ProtectedRoute allowedRoles={['admin_inspector']}>
+                      <InspectorVerificationCockpit />
                     </ProtectedRoute>
                   }
                 />

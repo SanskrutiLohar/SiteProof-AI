@@ -5,6 +5,8 @@ import { BOQTable } from '../../components/projects/BOQTable.tsx';
 import { getStatusBadge } from '../../components/projects/MilestoneList.tsx';
 import { EvidenceGallery } from '../../components/evidence/EvidenceGallery.tsx';
 import { AIDiscrepancyPanel } from '../../components/ai/AIDiscrepancyPanel.tsx';
+import { AuditReportModal } from '../../components/audit/AuditReportModal.tsx';
+import { AuditActivityTimeline } from '../../components/audit/AuditActivityTimeline.tsx';
 import { 
   ArrowLeft, 
   HardHat, 
@@ -15,7 +17,9 @@ import {
   Camera, 
   FileText, 
   Receipt,
-  Sparkles
+  Sparkles,
+  Printer,
+  History
 } from 'lucide-react';
 
 export const ContractorMilestonePage: React.FC = () => {
@@ -30,6 +34,8 @@ export const ContractorMilestonePage: React.FC = () => {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionFeedback, setSubmissionFeedback] = useState<string | null>(null);
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [showAuditTrail, setShowAuditTrail] = useState(false);
 
   const milestone = milestones.find((m) => m.id === milestoneId);
   const project = milestone ? getProjectById(milestone.project_id) : undefined;
@@ -63,8 +69,8 @@ export const ContractorMilestonePage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      {/* Back button */}
-      <div>
+      {/* Back button & Action Shortcuts */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <Link
           to="/contractor/dashboard"
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
@@ -72,6 +78,26 @@ export const ContractorMilestonePage: React.FC = () => {
           <ArrowLeft className="w-3.5 h-3.5" />
           Back to Assigned Projects
         </Link>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAuditTrail(!showAuditTrail)}
+            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-bold transition-colors flex items-center gap-1.5"
+          >
+            <History className="w-3.5 h-3.5 text-blue-400" />
+            {showAuditTrail ? 'Hide Audit Log' : 'View Audit Log'}
+          </button>
+
+          {milestone.status === 'verified' && (
+            <button
+              onClick={() => setIsReportOpen(true)}
+              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-all flex items-center gap-1.5 shadow-lg shadow-amber-500/20 hover:scale-102"
+            >
+              <Printer className="w-4 h-4" />
+              Verified Certificate
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Submission Success Toast */}
@@ -143,6 +169,13 @@ export const ContractorMilestonePage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Audit Activity Trail Drawer (Collapsible) */}
+      {showAuditTrail && (
+        <div className="p-6 rounded-2xl glass-panel border border-slate-800 animate-fadeIn">
+          <AuditActivityTimeline milestoneId={milestone.id} />
+        </div>
+      )}
 
       {/* Evidence Summary Badges */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -233,6 +266,14 @@ export const ContractorMilestonePage: React.FC = () => {
 
         <BOQTable items={boqItems} showReconciliation={true} />
       </div>
+
+      {/* Audit Report Modal */}
+      <AuditReportModal
+        project={project}
+        milestone={milestone}
+        isOpen={isReportOpen}
+        onClose={() => setIsReportOpen(false)}
+      />
     </div>
   );
 };

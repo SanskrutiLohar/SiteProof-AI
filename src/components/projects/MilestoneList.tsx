@@ -5,8 +5,9 @@ import {
   Clock, 
   AlertTriangle, 
   ChevronRight, 
-  Calendar,
-  Layers
+  Calendar, 
+  Layers,
+  ShieldCheck
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -78,41 +79,51 @@ export const MilestoneList: React.FC<MilestoneListProps> = ({
           : `/admin/project/${projectId}?milestone=${m.id}`;
 
         return (
-          <Link
+          <div
             key={m.id}
-            to={linkUrl}
-            className="block p-4 rounded-xl glass-card hover:bg-slate-800/80 border border-slate-800/90 hover:border-slate-700 transition-all group"
+            className="p-4 rounded-xl glass-card hover:bg-slate-800/80 border border-slate-800/90 hover:border-slate-700 transition-all group flex flex-col sm:flex-row sm:items-center justify-between gap-4"
           >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center font-bold text-xs text-slate-300 border border-slate-700 shrink-0 mt-0.5">
-                  #{idx + 1}
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors">
-                    {m.title}
-                  </h4>
-                  <p className="text-xs text-slate-400 mt-1 line-clamp-2 max-w-xl">
-                    {m.description}
-                  </p>
-                  <div className="flex items-center gap-4 mt-2.5 text-[11px] text-slate-400">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3 text-slate-500" />
-                      Target: <strong className="text-slate-300">{m.target_date}</strong>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      Weight: <strong className="text-slate-300">{m.weight_percentage}%</strong>
-                    </span>
-                  </div>
+            <Link to={linkUrl} className="flex items-start gap-3 flex-1">
+              <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center font-bold text-xs text-slate-300 border border-slate-700 shrink-0 mt-0.5">
+                #{idx + 1}
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white group-hover:text-blue-400 transition-colors">
+                  {m.title}
+                </h4>
+                <p className="text-xs text-slate-400 mt-1 line-clamp-2 max-w-xl">
+                  {m.description}
+                </p>
+                <div className="flex items-center gap-4 mt-2 text-[11px] text-slate-400">
+                  <span className="flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-slate-500" />
+                    Target: <strong className="text-slate-300">{m.target_date}</strong>
+                  </span>
+                  <span className="flex items-center gap-1">
+                    Weight: <strong className="text-slate-300">{m.weight_percentage}%</strong>
+                  </span>
                 </div>
               </div>
+            </Link>
 
-              <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60">
-                {getStatusBadge(m.status)}
-                <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all" />
-              </div>
+            <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60">
+              {getStatusBadge(m.status)}
+
+              {!isContractor ? (
+                <Link
+                  to={`/admin/verify/${m.id}`}
+                  className="px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/40 text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+                  Verify Cockpit
+                </Link>
+              ) : (
+                <Link to={linkUrl} className="p-1 text-slate-500 hover:text-white">
+                  <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                </Link>
+              )}
             </div>
-          </Link>
+          </div>
         );
       })}
     </div>
