@@ -13,7 +13,17 @@ import { ContractorMilestonePage } from './pages/contractor/ContractorMilestoneP
 
 // Root redirect based on role
 const RootRedirect: React.FC = () => {
-  const { profile, role } = useAuth();
+  const { profile, role, isLoading } = useAuth();
+  
+  if (isLoading) {
+    return (
+      <div className="min-h-[70vh] flex flex-col items-center justify-center gap-3">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-xs font-medium text-slate-400">Loading session...</p>
+      </div>
+    );
+  }
+
   if (!profile) {
     return <Navigate to="/login" replace />;
   }

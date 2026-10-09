@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.tsx';
 import { DEMO_PERSONAS } from '../lib/constants.ts';
 import { UserRole } from '../types/index.ts';
@@ -25,8 +25,13 @@ export const AuthPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  const { signIn, signUp, switchDemoPersona } = useAuth();
+  const { profile, role, signIn, signUp, switchDemoPersona } = useAuth();
   const navigate = useNavigate();
+
+  // If already authenticated, redirect to corresponding dashboard
+  if (profile) {
+    return <Navigate to={role === 'admin_inspector' ? '/admin/dashboard' : '/contractor/dashboard'} replace />;
+  }
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
