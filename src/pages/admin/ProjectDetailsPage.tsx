@@ -1,0 +1,169 @@
+import React, { useState } from 'react';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
+import { useProjects } from '../../context/ProjectContext.tsx';
+import { MilestoneList } from '../../components/projects/MilestoneList.tsx';
+import { BOQTable } from '../../components/projects/BOQTable.tsx';
+import { 
+  Building2, 
+  MapPin, 
+  DollarSign, 
+  HardHat, 
+  Layers, 
+  ArrowLeft,
+  Calendar,
+  Sparkles
+} from 'lucide-react';
+
+export const ProjectDetailsPage: React.FC = () => {
+  const { projectId } = useParams<{ projectId: string }>();
+  const [searchParams] = useSearchParams();
+  const selectedMilestoneId = searchParams.get('milestone');
+
+  const { getProjectById, getProjectMilestones, getMilestoneBOQ } = useProjects();
+  const project = getProjectById(projectId || '');
+  const milestones = getProjectMilestones(projectId || '');
+
+  const [activeTab, setActiveTab] = useState<'milestones' | 'boq'>('milestones');
+
+  if (!project) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-12 text-center">
+        <h2 className="text-base font-bold text-white mb-2">Project not found</h2>
+        <Link to="/admin/dashboard" className="text-xs text-blue-400 hover:underline">
+          Return to Inspector Dashboard
+        </Link>
+      </div>
+    );
+  }
+
+  // Active milestone for BOQ focus
+  const activeMilestone = milestones.find(m => m.id === selectedMilestoneId) || milestones[0];
+  const boqItems = activeMilestone ? getMilestoneBOQ(activeMilestone.id) : [];
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      {/* Back button */}
+      <div>
+        <Link
+          to="/admin/dashboard"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Back to Projects List
+        </Link>
+      </div>
+
+      {/* Project Overview Card */}
+      <div className="p-6 rounded-2xl glass-panel border border-slate-800 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-glow-brand shrink-0">
+              <Building2 className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-800 text-blue-400 border border-slate-700">
+                  {project.code}
+                </span>
+                <span className="text-xs text-slate-400">Client: <strong className="text-slate-200">{project.client_name}</strong></span>
+              </div>
+              <h1 className="text-xl sm:text-2xl font-black text-white mt-1">
+                {project.title}
+              </h1>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 bg-slate-900/90 px-4 py-2.5 rounded-xl border border-slate-800 shrink-0">
+            <div>
+              <div className="text-[10px] uppercase font-bold text-slate-400">Total Contract Value</div>
+              <div className="text-base font-extrabold text-emerald-400 flex items-center">
+                <DollarSign className="w-4 h-4" />
+                {project.total_budget.toLocaleString()}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
+          {project.description}
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-800/80 text-xs text-slate-400">
+          <div className="flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-slate-500" />
+            <span>{project.location}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <HardHat className="w-4 h-4 text-amber-500" />
+            <span>Contractor: <strong className="text-slate-200">{project.assigned_contractor_name}</strong></span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-blue-400" />
+            <span>Milestone Stages: <strong className="text-slate-200">{milestones.length} Defined</strong></span>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-slate-800 gap-6 text-xs font-bold">
+        <button
+          onClick={() => setActiveTab('milestones')}
+          className={`pb-3 border-b-2 flex items-center gap-2 transition-all ${
+            activeTab === 'milestones'
+              ? 'border-blue-500 text-blue-400'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          Milestone Execution Checklist ({milestones.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('boq')}
+          className={`pb-3 border-b-2 flex items-center gap-2 transition-all ${
+            activeTab === 'boq'
+              ? 'border-blue-500 text-blue-400'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />
+          Bill of Quantities (BOQ) Audit View
+        </button>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'milestones' ? (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-200">
+              Contractor Milestones & Deliverables
+            </h2>
+            <span className="text-xs text-slate-400">
+              Click on any milestone to view verification scope
+            </span>
+          </div>
+          <MilestoneList milestones={milestones} projectId={project.id} />
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {activeMilestone && (
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-blue-400 tracking-wider">
+                  Active Milestone Scope
+                </span>
+                <h3 className="text-sm font-bold text-white mt-0.5">
+                  {activeMilestone.title}
+                </h3>
+              </div>
+              <span className="text-xs font-semibold px-2.5 py-1 rounded bg-slate-800 text-slate-300">
+                Target: {activeMilestone.target_date}
+              </span>
+            </div>
+          )}
+
+          <BOQTable items={boqItems} showReconciliation={true} />
+        </div>
+      )}
+    </div>
+  );
+};
