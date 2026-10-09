@@ -3,6 +3,7 @@ import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useProjects } from '../../context/ProjectContext.tsx';
 import { MilestoneList } from '../../components/projects/MilestoneList.tsx';
 import { BOQTable } from '../../components/projects/BOQTable.tsx';
+import { EvidenceGallery } from '../../components/evidence/EvidenceGallery.tsx';
 import { 
   Building2, 
   MapPin, 
@@ -11,7 +12,8 @@ import {
   Layers, 
   ArrowLeft,
   Calendar,
-  Sparkles
+  Sparkles,
+  FileCheck
 } from 'lucide-react';
 
 export const ProjectDetailsPage: React.FC = () => {
@@ -19,11 +21,21 @@ export const ProjectDetailsPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const selectedMilestoneId = searchParams.get('milestone');
 
-  const { getProjectById, getProjectMilestones, getMilestoneBOQ } = useProjects();
+  const { 
+    getProjectById, 
+    getProjectMilestones, 
+    getMilestoneBOQ,
+    getProjectEvidence 
+  } = useProjects();
+
   const project = getProjectById(projectId || '');
   const milestones = getProjectMilestones(projectId || '');
+  const projectEvidence = getProjectEvidence(projectId || '');
 
-  const [activeTab, setActiveTab] = useState<'milestones' | 'boq'>('milestones');
+  const [activeTab, setActiveTab] = useState<'milestones' | 'evidence' | 'boq'>('milestones');
+  const [selectedMilestoneFilter, setSelectedMilestoneFilter] = useState<string>(
+    selectedMilestoneId || (milestones[0]?.id ?? '')
+  );
 
   if (!project) {
     return (
@@ -37,7 +49,7 @@ export const ProjectDetailsPage: React.FC = () => {
   }
 
   // Active milestone for BOQ focus
-  const activeMilestone = milestones.find(m => m.id === selectedMilestoneId) || milestones[0];
+  const activeMilestone = milestones.find(m => m.id === selectedMilestoneFilter) || milestones[0];
   const boqItems = activeMilestone ? getMilestoneBOQ(activeMilestone.id) : [];
 
   return (
@@ -88,7 +100,7 @@ export const ProjectDetailsPage: React.FC = () => {
           {project.description}
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-800/80 text-xs text-slate-400">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-3 border-t border-slate-800/80 text-xs text-slate-400">
           <div className="flex items-center gap-2">
             <MapPin className="w-4 h-4 text-slate-500" />
             <span>{project.location}</span>
@@ -99,51 +111,100 @@ export const ProjectDetailsPage: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-blue-400" />
-            <span>Milestone Stages: <strong className="text-slate-200">{milestones.length} Defined</strong></span>
+            <span>Milestones: <strong className="text-slate-200">{milestones.length} Defined</strong></span>
+          </div>
+          <div className="flex items-center gap-2">
+            <FileCheck className="w-4 h-4 text-emerald-400" />
+            <span>Total Evidence: <strong className="text-slate-200">{projectEvidence.length} Files</strong></span>
           </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-slate-800 gap-6 text-xs font-bold">
+      {/* Navigation Tabs */}
+      <div className="flex border-b border-slate-800 gap-6 text-xs font-bold overflow-x-auto">
         <button
           onClick={() => setActiveTab('milestones')}
-          className={`pb-3 border-b-2 flex items-center gap-2 transition-all ${
+          className={`pb-3 border-b-2 flex items-center gap-2 whitespace-nowrap transition-all ${
             activeTab === 'milestones'
               ? 'border-blue-500 text-blue-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
           <Layers className="w-4 h-4" />
-          Milestone Execution Checklist ({milestones.length})
+          Milestone Checklist ({milestones.length})
         </button>
+
+        <button
+          onClick={() => setActiveTab('evidence')}
+          className={`pb-3 border-b-2 flex items-center gap-2 whitespace-nowrap transition-all ${
+            activeTab === 'evidence'
+              ? 'border-blue-500 text-blue-400'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <FileCheck className="w-4 h-4" />
+          Evidence & Document Register ({projectEvidence.length})
+        </button>
+
         <button
           onClick={() => setActiveTab('boq')}
-          className={`pb-3 border-b-2 flex items-center gap-2 transition-all ${
+          className={`pb-3 border-b-2 flex items-center gap-2 whitespace-nowrap transition-all ${
             activeTab === 'boq'
               ? 'border-blue-500 text-blue-400'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
           <Sparkles className="w-4 h-4" />
-          Bill of Quantities (BOQ) Audit View
+          Bill of Quantities (BOQ) Reconciliation
         </button>
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'milestones' ? (
+      {activeTab === 'milestones' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-slate-200">
               Contractor Milestones & Deliverables
             </h2>
             <span className="text-xs text-slate-400">
-              Click on any milestone to view verification scope
+              Click on any milestone to inspect contractor progress and evidence
             </span>
           </div>
           <MilestoneList milestones={milestones} projectId={project.id} />
         </div>
-      ) : (
+      )}
+
+      {activeTab === 'evidence' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl glass-panel border border-slate-800">
+            <div>
+              <h3 className="text-sm font-bold text-white">Select Milestone Scope</h3>
+              <p className="text-xs text-slate-400">Review contractor submissions for specific milestone stage</p>
+            </div>
+            <select
+              value={selectedMilestoneFilter}
+              onChange={(e) => setSelectedMilestoneFilter(e.target.value)}
+              className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-medium focus:outline-none focus:border-blue-400"
+            >
+              {milestones.map((m) => (
+                <option key={m.id} value={m.id}>
+                  Stage {m.sequence_order}: {m.title} ({m.status.toUpperCase()})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {activeMilestone && (
+            <EvidenceGallery
+              milestoneId={activeMilestone.id}
+              projectId={project.id}
+              isContractor={false}
+            />
+          )}
+        </div>
+      )}
+
+      {activeTab === 'boq' && (
         <div className="space-y-4">
           {activeMilestone && (
             <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">

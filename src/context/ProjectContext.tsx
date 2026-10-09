@@ -1,17 +1,19 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Project, Milestone, BOQItem, UserProfile, MilestoneStatus } from '../types/index.ts';
+import { Project, Milestone, BOQItem, UserProfile, MilestoneStatus, EvidenceItem } from '../types/index.ts';
 import { 
   INITIAL_PROJECTS, 
   INITIAL_MILESTONES, 
   INITIAL_BOQ_ITEMS, 
   INITIAL_CONTRACTORS 
 } from '../lib/seedData.ts';
+import { INITIAL_EVIDENCE, generateSampleEvidenceForMilestone } from '../lib/sampleEvidence.ts';
 
 interface ProjectContextType {
   projects: Project[];
   milestones: Milestone[];
   boqItems: BOQItem[];
   contractors: UserProfile[];
+  evidence: EvidenceItem[];
   createProject: (
     projectData: Omit<Project, 'id' | 'created_at'>,
     milestoneList: Array<Omit<Milestone, 'id' | 'project_id' | 'created_at'>>
@@ -23,6 +25,12 @@ interface ProjectContextType {
   getContractorProjects: (contractorId: string) => Project[];
   addBOQItem: (item: Omit<BOQItem, 'id'>) => BOQItem;
   updateBOQItem: (id: string, updates: Partial<BOQItem>) => void;
+  // Phase 2 Evidence Management
+  addEvidence: (evidenceData: Omit<EvidenceItem, 'id' | 'uploaded_at'>) => EvidenceItem;
+  deleteEvidence: (evidenceId: string) => void;
+  getMilestoneEvidence: (milestoneId: string) => EvidenceItem[];
+  getProjectEvidence: (projectId: string) => EvidenceItem[];
+  loadSampleEvidenceForMilestone: (milestoneId: string, projectId: string) => void;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -43,6 +51,11 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return saved ? JSON.parse(saved) : INITIAL_BOQ_ITEMS;
   });
 
+  const [evidence, setEvidence] = useState<EvidenceItem[]>(() => {
+    const saved = localStorage.getItem('siteproof_evidence');
+    return saved ? JSON.parse(saved) : INITIAL_EVIDENCE;
+  });
+
   const [contractors] = useState<UserProfile[]>(INITIAL_CONTRACTORS);
 
   useEffect(() => {
@@ -56,6 +69,10 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     localStorage.setItem('siteproof_boq_items', JSON.stringify(boqItems));
   }, [boqItems]);
+
+  useEffect(() => {
+    localStorage.setItem('siteproof_evidence', JSON.stringify(evidence));
+  }, [evidence]);
 
   const getProjectById = (projectId: string) => {
     return projects.find((p) => p.id === projectId);
@@ -125,6 +142,46 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
   };
 
+  // Phase 2 Evidence Helpers
+  const addEvidence = (evidenceData: Omit<EvidenceItem, 'id' | 'uploaded_at'>): EvidenceItem => {
+    const newEvidence: EvidenceItem = {
+      ...evidenceData,
+      id: `ev-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      uploaded_at: new Date().toISOString(),
+    };
+
+    setEvidence((prev) => [newEvidence, ...prev]);
+    return newEvidence;
+  };
+
+  const deleteEvidence = (evidenceId: string) => {
+    setEvidence((prev) => prev.filter((item) => item.id !== evidenceId));
+  };
+
+  const getMilestoneEvidence = (milestoneId: string) => {
+    return evidence.filter((item) => item.milestone_id === milestoneId);
+  };
+
+  const getProjectEvidence = (projectId: string) => {
+    return evidence.filter((item) => item.project_id === projectId);
+  };
+
+  const loadSampleEvidenceForMilestone = (milestoneId: string, projectId: string) => {
+    // Check if initial evidence already exists for this milestone
+    const existing = evidence.filter((e) => e.milestone_id === milestoneId);
+    if (existing.length > 0) {
+      return; // Already has evidence loaded
+    }
+
+    const initialPack = INITIAL_EVIDENCE.filter((e) => e.milestone_id === milestoneId);
+    if (initialPack.length > 0) {
+      setEvidence((prev) => [...initialPack, ...prev]);
+    } else {
+      const generatedPack = generateSampleEvidenceForMilestone(milestoneId, projectId);
+      setEvidence((prev) => [...generatedPack, ...prev]);
+    }
+  };
+
   return (
     <ProjectContext.Provider
       value={{
@@ -132,6 +189,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         milestones,
         boqItems,
         contractors,
+        evidence,
         createProject,
         updateMilestoneStatus,
         getProjectById,
@@ -140,6 +198,11 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         getContractorProjects,
         addBOQItem,
         updateBOQItem,
+        addEvidence,
+        deleteEvidence,
+        getMilestoneEvidence,
+        getProjectEvidence,
+        loadSampleEvidenceForMilestone,
       }}
     >
       {children}
