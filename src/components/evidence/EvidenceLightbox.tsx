@@ -212,19 +212,27 @@ export const EvidenceLightbox: React.FC<EvidenceLightboxProps> = ({
               </h3>
             </div>
 
-            {/* AI Verification Readiness (Phase 3 Hook) */}
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/10 via-slate-850 to-slate-900 border border-amber-500/30 space-y-2">
+            {/* AI Verification Findings */}
+            <div className={`p-4 rounded-2xl border space-y-2 ${
+              evidence.ai_analyzed
+                ? 'bg-gradient-to-br from-amber-500/15 via-slate-850 to-slate-900 border-amber-500/40'
+                : 'bg-slate-800/40 border-slate-700/60'
+            }`}>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
                   <Sparkles className="w-4 h-4 text-amber-400" />
-                  AI Vision & OCR Engine
+                  {evidence.type === 'photo' ? 'Multimodal Vision AI' : 'Document OCR Extraction'}
                 </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                  Phase 3 Ready
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                  evidence.ai_analyzed
+                    ? 'bg-amber-500 text-slate-950 shadow-sm'
+                    : 'bg-slate-800 text-slate-400 border border-slate-700'
+                }`}>
+                  {evidence.ai_analyzed ? `${evidence.ai_confidence || 95}% Confidence` : 'Pending Analysis'}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-300 leading-relaxed">
-                Structured multimodal vision inspection and automated document OCR discrepancy cross-matching will process this item in Phase 3.
+              <p className="text-[11px] text-slate-200 leading-relaxed">
+                {evidence.ai_summary || 'Click "Run AI Milestone Verification" in the milestone dashboard to trigger automated Gemini Vision & OCR extraction.'}
               </p>
             </div>
 

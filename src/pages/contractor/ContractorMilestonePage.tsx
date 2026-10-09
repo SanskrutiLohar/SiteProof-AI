@@ -4,6 +4,7 @@ import { useProjects } from '../../context/ProjectContext.tsx';
 import { BOQTable } from '../../components/projects/BOQTable.tsx';
 import { getStatusBadge } from '../../components/projects/MilestoneList.tsx';
 import { EvidenceGallery } from '../../components/evidence/EvidenceGallery.tsx';
+import { AIDiscrepancyPanel } from '../../components/ai/AIDiscrepancyPanel.tsx';
 import { 
   ArrowLeft, 
   HardHat, 
@@ -190,6 +191,12 @@ export const ContractorMilestonePage: React.FC = () => {
           </span>
         </div>
       </div>
+
+      {/* AI Verification & Discrepancy Cockpit */}
+      <AIDiscrepancyPanel
+        milestoneId={milestone.id}
+        isInspector={false}
+      />
 
       {/* Evidence Gallery & Timeline Explorer */}
       <div className="space-y-4">

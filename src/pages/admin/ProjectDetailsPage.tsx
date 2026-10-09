@@ -4,6 +4,7 @@ import { useProjects } from '../../context/ProjectContext.tsx';
 import { MilestoneList } from '../../components/projects/MilestoneList.tsx';
 import { BOQTable } from '../../components/projects/BOQTable.tsx';
 import { EvidenceGallery } from '../../components/evidence/EvidenceGallery.tsx';
+import { AIDiscrepancyPanel } from '../../components/ai/AIDiscrepancyPanel.tsx';
 import { 
   Building2, 
   MapPin, 
@@ -195,11 +196,17 @@ export const ProjectDetailsPage: React.FC = () => {
           </div>
 
           {activeMilestone && (
-            <EvidenceGallery
-              milestoneId={activeMilestone.id}
-              projectId={project.id}
-              isContractor={false}
-            />
+            <>
+              <AIDiscrepancyPanel
+                milestoneId={activeMilestone.id}
+                isInspector={true}
+              />
+              <EvidenceGallery
+                milestoneId={activeMilestone.id}
+                projectId={project.id}
+                isContractor={false}
+              />
+            </>
           )}
         </div>
       )}

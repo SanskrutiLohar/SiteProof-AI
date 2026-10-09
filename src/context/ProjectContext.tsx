@@ -1,5 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Project, Milestone, BOQItem, UserProfile, MilestoneStatus, EvidenceItem } from '../types/index.ts';
+import { 
+  Project, 
+  Milestone, 
+  BOQItem, 
+  UserProfile, 
+  MilestoneStatus, 
+  EvidenceItem,
+  DiscrepancyFlag
+} from '../types/index.ts';
+import { MilestoneReconciliationReport } from '../types/ai.ts';
 import { 
   INITIAL_PROJECTS, 
   INITIAL_MILESTONES, 
@@ -7,6 +16,8 @@ import {
   INITIAL_CONTRACTORS 
 } from '../lib/seedData.ts';
 import { INITIAL_EVIDENCE, generateSampleEvidenceForMilestone } from '../lib/sampleEvidence.ts';
+import { analyzeEvidenceWithAI } from '../lib/geminiApi.ts';
+import { performMilestoneReconciliation } from '../lib/reconciliationEngine.ts';
 
 interface ProjectContextType {
   projects: Project[];
@@ -14,6 +25,7 @@ interface ProjectContextType {
   boqItems: BOQItem[];
   contractors: UserProfile[];
   evidence: EvidenceItem[];
+  discrepancies: DiscrepancyFlag[];
   createProject: (
     projectData: Omit<Project, 'id' | 'created_at'>,
     milestoneList: Array<Omit<Milestone, 'id' | 'project_id' | 'created_at'>>
@@ -25,12 +37,18 @@ interface ProjectContextType {
   getContractorProjects: (contractorId: string) => Project[];
   addBOQItem: (item: Omit<BOQItem, 'id'>) => BOQItem;
   updateBOQItem: (id: string, updates: Partial<BOQItem>) => void;
-  // Phase 2 Evidence Management
+  // Evidence Management
   addEvidence: (evidenceData: Omit<EvidenceItem, 'id' | 'uploaded_at'>) => EvidenceItem;
   deleteEvidence: (evidenceId: string) => void;
   getMilestoneEvidence: (milestoneId: string) => EvidenceItem[];
   getProjectEvidence: (projectId: string) => EvidenceItem[];
   loadSampleEvidenceForMilestone: (milestoneId: string, projectId: string) => void;
+  // Phase 3 AI Verification & Discrepancies
+  runMilestoneAIAnalysis: (milestoneId: string) => Promise<MilestoneReconciliationReport>;
+  getMilestoneDiscrepancies: (milestoneId: string) => DiscrepancyFlag[];
+  getProjectDiscrepancies: (projectId: string) => DiscrepancyFlag[];
+  resolveDiscrepancy: (flagId: string, resolutionNote?: string) => void;
+  dismissDiscrepancy: (flagId: string) => void;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -56,6 +74,11 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return saved ? JSON.parse(saved) : INITIAL_EVIDENCE;
   });
 
+  const [discrepancies, setDiscrepancies] = useState<DiscrepancyFlag[]>(() => {
+    const saved = localStorage.getItem('siteproof_discrepancies');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [contractors] = useState<UserProfile[]>(INITIAL_CONTRACTORS);
 
   useEffect(() => {
@@ -73,6 +96,10 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     localStorage.setItem('siteproof_evidence', JSON.stringify(evidence));
   }, [evidence]);
+
+  useEffect(() => {
+    localStorage.setItem('siteproof_discrepancies', JSON.stringify(discrepancies));
+  }, [discrepancies]);
 
   const getProjectById = (projectId: string) => {
     return projects.find((p) => p.id === projectId);
@@ -142,7 +169,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
   };
 
-  // Phase 2 Evidence Helpers
+  // Evidence Helpers
   const addEvidence = (evidenceData: Omit<EvidenceItem, 'id' | 'uploaded_at'>): EvidenceItem => {
     const newEvidence: EvidenceItem = {
       ...evidenceData,
@@ -167,10 +194,9 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const loadSampleEvidenceForMilestone = (milestoneId: string, projectId: string) => {
-    // Check if initial evidence already exists for this milestone
     const existing = evidence.filter((e) => e.milestone_id === milestoneId);
     if (existing.length > 0) {
-      return; // Already has evidence loaded
+      return;
     }
 
     const initialPack = INITIAL_EVIDENCE.filter((e) => e.milestone_id === milestoneId);
@@ -182,6 +208,84 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  // Phase 3 AI Verification & Discrepancies
+  const runMilestoneAIAnalysis = async (milestoneId: string): Promise<MilestoneReconciliationReport> => {
+    const milestoneItems = evidence.filter((e) => e.milestone_id === milestoneId);
+    const boqs = boqItems.filter((b) => b.milestone_id === milestoneId);
+
+    // 1. Analyze each un-analyzed evidence item
+    const updatedEvidenceItems: EvidenceItem[] = [];
+
+    for (const item of milestoneItems) {
+      const aiResult = await analyzeEvidenceWithAI(item);
+      updatedEvidenceItems.push({
+        ...item,
+        ai_analyzed: true,
+        ai_summary: aiResult.rawSummary,
+        ai_confidence: aiResult.confidence,
+      });
+    }
+
+    // Update evidence in context
+    setEvidence((prev) =>
+      prev.map((e) => {
+        const match = updatedEvidenceItems.find((u) => u.id === e.id);
+        return match || e;
+      })
+    );
+
+    // 2. Perform 5-stage quantity reconciliation & discrepancy analysis
+    const { report, discrepancies: newFlags } = performMilestoneReconciliation(
+      milestoneId,
+      boqs,
+      updatedEvidenceItems
+    );
+
+    // Update discrepancies state (replacing existing open flags for this milestone)
+    setDiscrepancies((prev) => [
+      ...prev.filter((f) => f.milestone_id !== milestoneId),
+      ...newFlags,
+    ]);
+
+    // Update milestone status to in_progress if still pending
+    const currentMilestone = milestones.find((m) => m.id === milestoneId);
+    if (currentMilestone && currentMilestone.status === 'pending') {
+      updateMilestoneStatus(milestoneId, 'in_progress');
+    }
+
+    return report;
+  };
+
+  const getMilestoneDiscrepancies = (milestoneId: string) => {
+    return discrepancies.filter((d) => d.milestone_id === milestoneId);
+  };
+
+  const getProjectDiscrepancies = (projectId: string) => {
+    const projectMilestoneIds = milestones
+      .filter((m) => m.project_id === projectId)
+      .map((m) => m.id);
+    return discrepancies.filter((d) => projectMilestoneIds.includes(d.milestone_id));
+  };
+
+  const resolveDiscrepancy = (flagId: string) => {
+    setDiscrepancies((prev) =>
+      prev.map((d) =>
+        d.id === flagId
+          ? {
+              ...d,
+              status: 'resolved',
+            }
+          : d
+      )
+    );
+  };
+
+  const dismissDiscrepancy = (flagId: string) => {
+    setDiscrepancies((prev) =>
+      prev.map((d) => (d.id === flagId ? { ...d, status: 'dismissed' } : d))
+    );
+  };
+
   return (
     <ProjectContext.Provider
       value={{
@@ -190,6 +294,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         boqItems,
         contractors,
         evidence,
+        discrepancies,
         createProject,
         updateMilestoneStatus,
         getProjectById,
@@ -203,6 +308,11 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         getMilestoneEvidence,
         getProjectEvidence,
         loadSampleEvidenceForMilestone,
+        runMilestoneAIAnalysis,
+        getMilestoneDiscrepancies,
+        getProjectDiscrepancies,
+        resolveDiscrepancy,
+        dismissDiscrepancy,
       }}
     >
       {children}
