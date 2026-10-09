@@ -7,16 +7,16 @@
 
 ### Authentication & Authorization
 
-- [ ] **AUTH-01**: User can log in and sign up with email and password via Supabase Auth.
-- [ ] **AUTH-02**: System enforces distinct roles (`admin_inspector`, `contractor`) with route protection and Row Level Security (RLS).
-- [ ] **AUTH-03**: User session securely persists and maintains role context across page reloads.
+- [x] **AUTH-01**: User can log in and sign up with email and password via Supabase Auth.
+- [x] **AUTH-02**: System enforces distinct roles (`admin_inspector`, `contractor`) with route protection and Row Level Security (RLS).
+- [x] **AUTH-03**: User session securely persists and maintains role context across page reloads.
 
 ### Projects & Milestones
 
-- [ ] **PROJ-01**: Admin can create a construction project with title, location, description, and budget.
-- [ ] **PROJ-02**: Admin can assign contractors to specific projects.
-- [ ] **PROJ-03**: Admin can define milestone stages, expected completion dates, and Bill of Quantities (BOQ) baseline targets.
-- [ ] **PROJ-04**: Contractor can view their assigned projects, milestone checklists, and deadline schedules.
+- [x] **PROJ-01**: Admin can create a construction project with title, location, description, and budget.
+- [x] **PROJ-02**: Admin can assign contractors to specific projects.
+- [x] **PROJ-03**: Admin can define milestone stages, expected completion dates, and Bill of Quantities (BOQ) baseline targets.
+- [x] **PROJ-04**: Contractor can view their assigned projects, milestone checklists, and deadline schedules.
 
 ### Evidence Submission & Management
 
@@ -64,13 +64,13 @@ Which phases cover which requirements.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | Phase 1 | Pending |
-| AUTH-02 | Phase 1 | Pending |
-| AUTH-03 | Phase 1 | Pending |
-| PROJ-01 | Phase 1 | Pending |
-| PROJ-02 | Phase 1 | Pending |
-| PROJ-03 | Phase 1 | Pending |
-| PROJ-04 | Phase 1 | Pending |
+| AUTH-01 | Phase 1 | Complete |
+| AUTH-02 | Phase 1 | Complete |
+| AUTH-03 | Phase 1 | Complete |
+| PROJ-01 | Phase 1 | Complete |
+| PROJ-02 | Phase 1 | Complete |
+| PROJ-03 | Phase 1 | Complete |
+| PROJ-04 | Phase 1 | Complete |
 | EVID-01 | Phase 2 | Pending |
 | EVID-02 | Phase 2 | Pending |
 | EVID-03 | Phase 2 | Pending |

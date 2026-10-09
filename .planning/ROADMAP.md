@@ -6,7 +6,7 @@ SiteProof AI delivers an end-to-end construction milestone verification workflow
 
 ## Phases
 
-- [ ] **Phase 1: Foundation, Authentication & Project Setup** - Core database schema, role-based authentication, project workspace & milestone definitions.
+- [x] **Phase 1: Foundation, Authentication & Project Setup** - Core database schema, role-based authentication, project workspace & milestone definitions.
 - [ ] **Phase 2: Evidence Submission & Document Intake** - Contractor media uploader, geo/timestamped site photography, invoice/challan storage & timeline explorer.
 - [ ] **Phase 3: AI Vision & OCR Discrepancy Engine** - Server-side Gemini vision progress analysis, document OCR extraction, and 5-stage quantity reconciliation.
 - [ ] **Phase 4: Inspector Audit Dashboard, Decision Workflow & Reports** - Unified inspector verification cockpit, decision actions, physical inspection scheduling, and audit report generation.
@@ -24,8 +24,8 @@ SiteProof AI delivers an end-to-end construction milestone verification workflow
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: Initialize Vite/React/Tailwind app, Supabase client/schema, and role-based Auth system with routing.
-- [ ] 01-02: Build Project and Milestone management modules (Admin creation + Contractor project dashboard).
+- [x] 01-01: Initialize Vite/React/Tailwind app, Supabase client/schema, and role-based Auth system with routing.
+- [x] 01-02: Build Project and Milestone management modules (Admin creation + Contractor project dashboard).
 
 ### Phase 2: Evidence Submission & Document Intake
 **Goal**: Enable contractors to upload multi-source construction evidence (site photos with metadata, delivery challans, invoices) and view an organized timeline.
@@ -76,7 +76,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation, Authentication & Project Setup | 0/2 | Not started | - |
+| 1. Foundation, Authentication & Project Setup | 2/2 | Complete | 2026-10-09 |
 | 2. Evidence Submission & Document Intake | 0/2 | Not started | - |
 | 3. AI Vision & OCR Discrepancy Engine | 0/2 | Not started | - |
 | 4. Inspector Audit Dashboard, Decision Workflow & Reports | 0/2 | Not started | - |
