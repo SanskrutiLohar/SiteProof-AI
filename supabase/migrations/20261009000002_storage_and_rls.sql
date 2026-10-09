@@ -39,6 +39,19 @@ ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 -- 3. Security Definer Helper Functions (with explicit search_path)
 -- -------------------------------------------------------------
 
+-- Helper: Retrieve current user's role safely without RLS recursion
+CREATE OR REPLACE FUNCTION public.get_current_user_role()
+RETURNS TEXT AS $$
+DECLARE
+    v_role TEXT;
+BEGIN
+    SELECT role INTO v_role
+    FROM public.profiles
+    WHERE id = auth.uid();
+    RETURN v_role;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
 -- Helper: Check if current authenticated user has the 'admin_inspector' role
 CREATE OR REPLACE FUNCTION public.is_inspector()
 RETURNS BOOLEAN AS $$
@@ -89,16 +102,109 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
+-- Helper: Safely extract and validate UUID from storage folder name without runtime errors
+CREATE OR REPLACE FUNCTION public.safe_folder_uuid(p_name TEXT)
+RETURNS UUID AS $$
+DECLARE
+    v_parts TEXT[];
+    v_folder TEXT;
+BEGIN
+    IF p_name IS NULL THEN
+        RETURN NULL;
+    END IF;
+    v_parts := storage.foldername(p_name);
+    IF v_parts IS NULL OR array_length(v_parts, 1) < 1 THEN
+        RETURN NULL;
+    END IF;
+    v_folder := v_parts[1];
+    -- Validate standard UUID regex pattern: 8-4-4-4-12 hexadecimal digits
+    IF v_folder ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+        RETURN v_folder::UUID;
+    ELSE
+        RETURN NULL;
+    END IF;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT SET search_path = public, pg_temp;
+
 -- Grant execution to authenticated and service_role
+GRANT EXECUTE ON FUNCTION public.get_current_user_role() TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.is_inspector() TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.is_project_contractor(UUID) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.has_project_access(UUID) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.safe_folder_uuid(TEXT) TO authenticated, service_role;
+REVOKE EXECUTE ON FUNCTION public.get_current_user_role() FROM anon, public;
 REVOKE EXECUTE ON FUNCTION public.is_inspector() FROM anon, public;
 REVOKE EXECUTE ON FUNCTION public.is_project_contractor(UUID) FROM anon, public;
 REVOKE EXECUTE ON FUNCTION public.has_project_access(UUID) FROM anon, public;
+REVOKE EXECUTE ON FUNCTION public.safe_folder_uuid(TEXT) FROM anon, public;
 
 -- -------------------------------------------------------------
--- 4. RLS Policies: Profiles
+-- 4. Triggers for Column-Level Integrity & Anti-Tampering
+-- -------------------------------------------------------------
+
+-- Trigger function: Enforce milestone update constraints on contractors
+CREATE OR REPLACE FUNCTION public.check_milestone_contractor_update()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NOT public.is_inspector() THEN
+        -- Contractors cannot alter baseline configuration
+        IF NEW.project_id <> OLD.project_id OR
+           NEW.title <> OLD.title OR
+           NEW.sequence_order <> OLD.sequence_order OR
+           NEW.weight_percentage <> OLD.weight_percentage OR
+           NEW.target_date <> OLD.target_date THEN
+            RAISE EXCEPTION 'Contractors are not authorized to modify milestone configuration or baseline criteria.';
+        END IF;
+
+        -- Contractors can only advance status between pending, in_progress, and submitted
+        IF NEW.status NOT IN ('pending', 'in_progress', 'submitted') THEN
+            RAISE EXCEPTION 'Contractors cannot set milestone status to %', NEW.status;
+        END IF;
+
+        -- Contractors cannot modify verified or rejected milestones
+        IF OLD.status IN ('verified', 'rejected') AND NEW.status <> OLD.status THEN
+            RAISE EXCEPTION 'Contractors cannot reopen or alter verified/rejected milestones.';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+DROP TRIGGER IF EXISTS trg_check_milestone_update ON public.milestones;
+CREATE TRIGGER trg_check_milestone_update
+    BEFORE UPDATE ON public.milestones
+    FOR EACH ROW
+    EXECUTE FUNCTION public.check_milestone_contractor_update();
+
+-- Trigger function: Enforce material record update constraints on contractors
+CREATE OR REPLACE FUNCTION public.check_material_record_update()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NOT public.is_inspector() THEN
+        -- Contractors cannot alter baseline quantities, units, rates, or financial fields
+        IF NEW.project_id <> OLD.project_id OR
+           NEW.milestone_id <> OLD.milestone_id OR
+           NEW.material_name <> OLD.material_name OR
+           NEW.unit <> OLD.unit OR
+           NEW.planned_qty <> OLD.planned_qty OR
+           NEW.unit_rate <> OLD.unit_rate OR
+           NEW.ordered_qty <> OLD.ordered_qty OR
+           NEW.paid_qty <> OLD.paid_qty THEN
+            RAISE EXCEPTION 'Contractors may only update delivered or consumed quantities on material records.';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+DROP TRIGGER IF EXISTS trg_check_material_record_update ON public.material_records;
+CREATE TRIGGER trg_check_material_record_update
+    BEFORE UPDATE ON public.material_records
+    FOR EACH ROW
+    EXECUTE FUNCTION public.check_material_record_update();
+
+-- -------------------------------------------------------------
+-- 5. RLS Policies: Profiles (Recursion-Free)
 -- -------------------------------------------------------------
 DROP POLICY IF EXISTS "Users can view member profiles" ON public.profiles;
 DROP POLICY IF EXISTS "Users can view all member profiles" ON public.profiles;
@@ -127,8 +233,8 @@ CREATE POLICY "Users can update own profile"
     WITH CHECK (
         auth.uid() = id
         AND (
-            -- Prevent self-privilege escalation to admin_inspector
-            role = (SELECT p.role FROM public.profiles p WHERE p.id = auth.uid())
+            -- Anti-escalation: role cannot change unless already inspector
+            role = public.get_current_user_role()
             OR public.is_inspector()
         )
     );
@@ -140,7 +246,7 @@ CREATE POLICY "Inspectors can manage all profiles"
     WITH CHECK (public.is_inspector());
 
 -- -------------------------------------------------------------
--- 5. RLS Policies: Projects & Project Members
+-- 6. RLS Policies: Projects & Project Members
 -- -------------------------------------------------------------
 DROP POLICY IF EXISTS "Inspectors can view all projects" ON public.projects;
 DROP POLICY IF EXISTS "Inspectors can manage projects" ON public.projects;
@@ -152,7 +258,7 @@ DROP POLICY IF EXISTS "Inspectors can manage project members" ON public.project_
 CREATE POLICY "Authorized users can view projects"
     ON public.projects FOR SELECT
     TO authenticated
-    USING (public.is_inspector() OR public.is_project_contractor(id));
+    USING (public.has_project_access(id));
 
 CREATE POLICY "Inspectors can manage projects"
     ON public.projects FOR ALL
@@ -163,7 +269,7 @@ CREATE POLICY "Inspectors can manage projects"
 CREATE POLICY "Authorized users can view project members"
     ON public.project_members FOR SELECT
     TO authenticated
-    USING (public.is_inspector() OR public.is_project_contractor(project_id));
+    USING (public.has_project_access(project_id));
 
 CREATE POLICY "Inspectors can manage project members"
     ON public.project_members FOR ALL
@@ -172,10 +278,11 @@ CREATE POLICY "Inspectors can manage project members"
     WITH CHECK (public.is_inspector());
 
 -- -------------------------------------------------------------
--- 6. RLS Policies: Milestones, BOQ Items & Reference Evidence
+-- 7. RLS Policies: Milestones, BOQ Items & Reference Evidence
 -- -------------------------------------------------------------
 DROP POLICY IF EXISTS "Authorized users can view milestones" ON public.milestones;
 DROP POLICY IF EXISTS "Inspectors can manage milestones" ON public.milestones;
+DROP POLICY IF EXISTS "Contractors can update status on assigned milestones" ON public.milestones;
 DROP POLICY IF EXISTS "Contractors can update submission status on assigned milestones" ON public.milestones;
 DROP POLICY IF EXISTS "Authorized users can view BOQ items" ON public.boq_items;
 DROP POLICY IF EXISTS "Inspectors can manage BOQ items" ON public.boq_items;
@@ -197,11 +304,7 @@ CREATE POLICY "Contractors can update status on assigned milestones"
     ON public.milestones FOR UPDATE
     TO authenticated
     USING (public.is_project_contractor(project_id))
-    WITH CHECK (
-        public.is_project_contractor(project_id)
-        -- Contractors can only advance from pending -> submitted or in_progress -> submitted
-        AND status IN ('pending', 'in_progress', 'submitted')
-    );
+    WITH CHECK (public.is_project_contractor(project_id));
 
 CREATE POLICY "Authorized users can view BOQ items"
     ON public.boq_items FOR SELECT
@@ -231,12 +334,13 @@ CREATE POLICY "Inspectors can manage reference evidence"
     WITH CHECK (public.is_inspector());
 
 -- -------------------------------------------------------------
--- 7. RLS Policies: Evidence Submissions & Files
+-- 8. RLS Policies: Evidence Submissions & Files
 -- -------------------------------------------------------------
 DROP POLICY IF EXISTS "Users can view authorized evidence submissions" ON public.evidence_submissions;
 DROP POLICY IF EXISTS "Contractors can insert evidence submissions" ON public.evidence_submissions;
 DROP POLICY IF EXISTS "Inspectors can manage evidence submissions" ON public.evidence_submissions;
 DROP POLICY IF EXISTS "Users can view evidence files" ON public.evidence_files;
+DROP POLICY IF EXISTS "Authorized users can insert evidence files" ON public.evidence_files;
 DROP POLICY IF EXISTS "Contractors and inspectors can insert evidence files" ON public.evidence_files;
 DROP POLICY IF EXISTS "Inspectors can manage evidence files" ON public.evidence_files;
 DROP POLICY IF EXISTS "Authorized users can view project documents" ON public.project_documents;
@@ -292,13 +396,19 @@ CREATE POLICY "Inspectors can manage project documents"
     WITH CHECK (public.is_inspector());
 
 -- -------------------------------------------------------------
--- 8. RLS Policies: Document Extractions & Material Records
+-- 9. RLS Policies: Document Extractions & Material Records
 -- -------------------------------------------------------------
 DROP POLICY IF EXISTS "Authorized users can view extractions" ON public.document_extractions;
+DROP POLICY IF EXISTS "Authorized users can insert document extractions" ON public.document_extractions;
 DROP POLICY IF EXISTS "Users can update document extractions" ON public.document_extractions;
+DROP POLICY IF EXISTS "Inspectors can update document extractions" ON public.document_extractions;
+DROP POLICY IF EXISTS "Inspectors can delete document extractions" ON public.document_extractions;
 DROP POLICY IF EXISTS "Inspectors can manage document extractions" ON public.document_extractions;
 DROP POLICY IF EXISTS "Authorized users can view material records" ON public.material_records;
-DROP POLICY IF EXISTS "Inspectors and contractors can manage material records" ON public.material_records;
+DROP POLICY IF EXISTS "Inspectors can insert material records" ON public.material_records;
+DROP POLICY IF EXISTS "Authorized users can update material records" ON public.material_records;
+DROP POLICY IF EXISTS "Inspectors and contractors can update material records" ON public.material_records;
+DROP POLICY IF EXISTS "Inspectors can delete material records" ON public.material_records;
 
 CREATE POLICY "Authorized users can view extractions"
     ON public.document_extractions FOR SELECT
@@ -336,14 +446,24 @@ CREATE POLICY "Authorized users can view material records"
     TO authenticated
     USING (public.has_project_access(project_id));
 
-CREATE POLICY "Inspectors and contractors can update material records"
-    ON public.material_records FOR ALL
+CREATE POLICY "Inspectors can insert material records"
+    ON public.material_records FOR INSERT
+    TO authenticated
+    WITH CHECK (public.is_inspector());
+
+CREATE POLICY "Authorized users can update material records"
+    ON public.material_records FOR UPDATE
     TO authenticated
     USING (public.has_project_access(project_id))
     WITH CHECK (public.has_project_access(project_id));
 
+CREATE POLICY "Inspectors can delete material records"
+    ON public.material_records FOR DELETE
+    TO authenticated
+    USING (public.is_inspector());
+
 -- -------------------------------------------------------------
--- 9. RLS Policies: Verification Runs & Findings
+-- 10. RLS Policies: Verification Runs & Findings
 -- -------------------------------------------------------------
 DROP POLICY IF EXISTS "Authorized users can view verification runs" ON public.verification_runs;
 DROP POLICY IF EXISTS "Inspectors can manage verification runs" ON public.verification_runs;
@@ -378,7 +498,7 @@ CREATE POLICY "Inspectors can manage findings"
     WITH CHECK (public.is_inspector());
 
 -- -------------------------------------------------------------
--- 10. RLS Policies: Inspector Decisions & Physical Inspections
+-- 11. RLS Policies: Inspector Decisions & Physical Inspections
 -- -------------------------------------------------------------
 DROP POLICY IF EXISTS "Authorized users can view decisions" ON public.inspector_decisions;
 DROP POLICY IF EXISTS "Inspectors can create decisions" ON public.inspector_decisions;
@@ -417,9 +537,10 @@ CREATE POLICY "Inspectors can manage physical inspections"
     WITH CHECK (public.is_inspector());
 
 -- -------------------------------------------------------------
--- 11. RLS Policies: Immutable Audit Logs (Append-Only)
+-- 12. RLS Policies: Immutable Audit Logs (Append-Only)
 -- -------------------------------------------------------------
 DROP POLICY IF EXISTS "Authorized users can view audit logs" ON public.audit_logs;
+DROP POLICY IF EXISTS "Authorized actors can append audit logs" ON public.audit_logs;
 DROP POLICY IF EXISTS "Authenticated actors can append audit logs" ON public.audit_logs;
 DROP POLICY IF EXISTS "No updates allowed on audit logs" ON public.audit_logs;
 DROP POLICY IF EXISTS "No deletes allowed on audit logs" ON public.audit_logs;
@@ -455,7 +576,7 @@ CREATE POLICY "No deletes allowed on audit logs"
     USING (false);
 
 -- -------------------------------------------------------------
--- 12. Storage Bucket Security Policies (evidence-files)
+-- 13. Storage Bucket Security Policies (evidence-files)
 -- -------------------------------------------------------------
 DROP POLICY IF EXISTS "Authenticated users can upload evidence" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated users can read evidence files" ON storage.objects;
@@ -471,10 +592,7 @@ CREATE POLICY "Authorized users can read evidence files"
         bucket_id = 'evidence-files' 
         AND (
             public.is_inspector() 
-            OR (
-                array_length(storage.foldername(name), 1) >= 1
-                AND public.is_project_contractor((storage.foldername(name))[1]::uuid)
-            )
+            OR public.is_project_contractor(public.safe_folder_uuid(name))
         )
     );
 
@@ -486,10 +604,7 @@ CREATE POLICY "Authorized users can upload evidence files"
         bucket_id = 'evidence-files' 
         AND (
             public.is_inspector() 
-            OR (
-                array_length(storage.foldername(name), 1) >= 1
-                AND public.is_project_contractor((storage.foldername(name))[1]::uuid)
-            )
+            OR public.is_project_contractor(public.safe_folder_uuid(name))
         )
     );
 
