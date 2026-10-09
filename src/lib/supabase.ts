@@ -1,21 +1,34 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = 
+  import.meta.env.VITE_SUPABASE_URL || 
+  'https://aepvqvyjrspzlnaglxsx.supabase.co';
+
+const supabaseAnonKey = 
+  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || 
+  import.meta.env.VITE_SUPABASE_ANON_KEY || 
+  '';
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl && 
   supabaseAnonKey && 
-  !supabaseUrl.includes('placeholder') &&
-  !supabaseUrl.includes('your-supabase-url')
+  !supabaseAnonKey.includes('placeholder') &&
+  !supabaseAnonKey.includes('PASTE_SUPABASE_PUBLISHABLE_KEY_LOCALLY') &&
+  supabaseAnonKey.length > 20
 );
 
-// Real client or safe fallback instance
+// Real Supabase client or offline resilient client
 export const supabase: SupabaseClient = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : createClient('https://mock-instance.supabase.co', 'mock-anon-key', {
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    })
+  : createClient(supabaseUrl || 'https://aepvqvyjrspzlnaglxsx.supabase.co', 'mock-anon-key', {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
-      }
+      },
     });
