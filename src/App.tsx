@@ -9,6 +9,7 @@ import { AdminDashboard } from './pages/admin/AdminDashboard.tsx';
 import { ProjectDetailsPage } from './pages/admin/ProjectDetailsPage.tsx';
 import { InspectorVerificationCockpit } from './pages/admin/InspectorVerificationCockpit.tsx';
 import { ContractorDashboard } from './pages/contractor/ContractorDashboard.tsx';
+import { ContractorProjectPage } from './pages/contractor/ContractorProjectPage.tsx';
 import { ContractorMilestonePage } from './pages/contractor/ContractorMilestonePage.tsx';
 
 // Root redirect based on role
@@ -81,7 +82,7 @@ export const App: React.FC = () => {
                   path="/contractor/project/:projectId"
                   element={
                     <ProtectedRoute allowedRoles={['contractor']}>
-                      <ContractorDashboard />
+                      <ContractorProjectPage />
                     </ProtectedRoute>
                   }
                 />

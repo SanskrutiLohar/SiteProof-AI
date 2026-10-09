@@ -81,4 +81,13 @@ describe('SiteProof AI - Full System Workflow & Domain Integrity Tests', () => {
     expect(keyA).not.toBe(keyB);
     expect(keyA).not.toBe(keyC);
   });
+
+  // Test 6: Contractor Project Milestone resolution
+  it('resolves project milestones for contractor evidence intake', () => {
+    const project = INITIAL_PROJECTS[0];
+    const projectMilestones = INITIAL_MILESTONES.filter(m => m.project_id === project.id);
+    expect(projectMilestones.length).toBeGreaterThan(0);
+    expect(projectMilestones[0].id).toBeDefined();
+    expect(projectMilestones[0].sequence_order).toBe(1);
+  });
 });

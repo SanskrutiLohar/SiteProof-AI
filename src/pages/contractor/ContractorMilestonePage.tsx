@@ -88,15 +88,14 @@ export const ContractorMilestonePage: React.FC = () => {
             {showAuditTrail ? 'Hide Audit Log' : 'View Audit Log'}
           </button>
 
-          {milestone.status === 'verified' && (
-            <button
-              onClick={() => setIsReportOpen(true)}
-              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-all flex items-center gap-1.5 shadow-lg shadow-amber-500/20 hover:scale-102"
-            >
-              <Printer className="w-4 h-4" />
-              Verified Certificate
-            </button>
-          )}
+          <button
+            onClick={() => setIsReportOpen(true)}
+            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-all flex items-center gap-1.5 shadow-lg shadow-amber-500/20 hover:scale-102"
+            title="Generate and print comprehensive audit verification report"
+          >
+            <Printer className="w-4 h-4" />
+            Generate Audit Report
+          </button>
         </div>
       </div>
 

@@ -8,6 +8,7 @@ import { AIDiscrepancyPanel } from '../../components/ai/AIDiscrepancyPanel.tsx';
 import { AuditReportModal } from '../../components/audit/AuditReportModal.tsx';
 import { InspectionSchedulerModal } from '../../components/audit/InspectionSchedulerModal.tsx';
 import { AuditActivityTimeline } from '../../components/audit/AuditActivityTimeline.tsx';
+import { BOQUploadModal } from '../../components/projects/BOQUploadModal.tsx';
 import { 
   Building2, 
   MapPin, 
@@ -47,6 +48,7 @@ export const ProjectDetailsPage: React.FC = () => {
   // Modals
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [isSchedulerOpen, setIsSchedulerOpen] = useState(false);
+  const [isBOQUploadOpen, setIsBOQUploadOpen] = useState(false);
 
   if (!project) {
     return (
@@ -266,7 +268,7 @@ export const ProjectDetailsPage: React.FC = () => {
       {activeTab === 'boq' && (
         <div className="space-y-4">
           {activeMilestone && (
-            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <span className="text-[10px] uppercase font-bold text-blue-400 tracking-wider">
                   Active Milestone Scope
@@ -275,9 +277,18 @@ export const ProjectDetailsPage: React.FC = () => {
                   {activeMilestone.title}
                 </h3>
               </div>
-              <span className="text-xs font-semibold px-2.5 py-1 rounded bg-slate-800 text-slate-300">
-                Target: {activeMilestone.target_date}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold px-2.5 py-1 rounded bg-slate-800 text-slate-300">
+                  Target: {activeMilestone.target_date}
+                </span>
+                <button
+                  onClick={() => setIsBOQUploadOpen(true)}
+                  className="px-3.5 py-1.5 rounded-xl bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                  Upload Quotation (OCR)
+                </button>
+              </div>
             </div>
           )}
 
@@ -308,6 +319,13 @@ export const ProjectDetailsPage: React.FC = () => {
             projectId={project.id}
             isOpen={isSchedulerOpen}
             onClose={() => setIsSchedulerOpen(false)}
+          />
+
+          <BOQUploadModal
+            projectId={project.id}
+            milestoneId={activeMilestone.id}
+            isOpen={isBOQUploadOpen}
+            onClose={() => setIsBOQUploadOpen(false)}
           />
         </>
       )}

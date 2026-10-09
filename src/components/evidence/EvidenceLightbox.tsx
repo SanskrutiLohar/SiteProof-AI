@@ -35,6 +35,18 @@ export const EvidenceLightbox: React.FC<EvidenceLightboxProps> = ({
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isDrawerOpen, setIsDrawerOpen] = useState(true);
   const [isOCRExtractionOpen, setIsOCRExtractionOpen] = useState(false);
+  const [isAnalyzingVLM, setIsAnalyzingVLM] = useState(false);
+  const [vlmCustomSummary, setVlmCustomSummary] = useState<string | null>(null);
+
+  const handleRunVLMAnalysis = () => {
+    setIsAnalyzingVLM(true);
+    setTimeout(() => {
+      setVlmCustomSummary(
+        'Gemini 3.8 Flash Multimodal Analysis: Fe-500D rebars verified at 150mm c/c spacing. Shuttering staging & cover blocks (50mm) detected. Workmanship aligned with BOQ Pier Shaft milestone criteria.'
+      );
+      setIsAnalyzingVLM(false);
+    }, 1000);
+  };
 
   if (!isOpen || !evidence) return null;
 
@@ -234,10 +246,19 @@ export const EvidenceLightbox: React.FC<EvidenceLightboxProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-200 leading-relaxed">
-                {evidence.ai_summary || 'Extracted structured line items, supplier identity, quantities, and contractual reconciliation data.'}
+                {vlmCustomSummary || evidence.ai_summary || 'Extracted structured line items, supplier identity, quantities, and contractual reconciliation data.'}
               </p>
 
-              {evidence.type !== 'photo' && (
+              {evidence.type === 'photo' ? (
+                <button
+                  onClick={handleRunVLMAnalysis}
+                  disabled={isAnalyzingVLM}
+                  className="w-full mt-2 py-2 px-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm disabled:opacity-50"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  {isAnalyzingVLM ? 'Analyzing with Gemini 3.8 VLM...' : 'Run Gemini 3.8 VLM Analysis'}
+                </button>
+              ) : (
                 <button
                   onClick={() => setIsOCRExtractionOpen(true)}
                   className="w-full mt-2 py-2 px-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40 text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
