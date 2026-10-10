@@ -195,8 +195,32 @@ export function calculateHammingDistance(hashA: string, hashB: string): number {
 export function detectDuplicateEvidence(
   newSha256: string,
   newPerceptualHash: string | undefined,
-  existingFiles: ExistingEvidenceFileRef[]
+  existingFiles: ExistingEvidenceFileRef[],
+  newFileName?: string
 ): DuplicateDetectionResult {
+  // 0. Check Normalized Filename / Document Match
+  if (newFileName) {
+    const cleanNewName = newFileName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (cleanNewName.length > 0) {
+      const nameMatch = existingFiles.find((file) => {
+        const cleanExisting = (file.file_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        return cleanExisting === cleanNewName;
+      });
+      if (nameMatch) {
+        return {
+          isExactDuplicate: true,
+          isVisualDuplicate: false,
+          duplicateOf: {
+            id: nameMatch.id,
+            file_name: nameMatch.file_name,
+            type: 'exact_sha256',
+            similarityPercentage: 100,
+          },
+        };
+      }
+    }
+  }
+
   // 1. Check Exact SHA-256 Match
   if (newSha256) {
     const exactMatch = existingFiles.find(
@@ -285,7 +309,7 @@ export function detectDuplicateInvoice(
         matches.push({
           id: ex.id,
           milestone_id: ex.milestone_id,
-          reason: `Same invoice number "${invoiceNumber}" and identical total amount ($${totalAmount.toLocaleString()}) found.`,
+          reason: `Same invoice number "${invoiceNumber}" and identical total amount (₹${totalAmount.toLocaleString('en-IN')}) found.`,
           confidence: 'high',
         });
       } else {

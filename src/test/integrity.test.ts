@@ -57,6 +57,28 @@ describe('SiteProof AI - Cryptographic Verification & Data Integrity Suite', () 
     expect(result.duplicateOf?.type).toBe('exact_sha256');
   });
 
+  // Test 3b: Duplicate Delivery Challan Detection by Filename
+  it('detects duplicate delivery challans uploaded for the same phase by filename', () => {
+    const existingFiles = [
+      {
+        id: 'ev-challan-101',
+        file_name: 'Tata_Steel_Challan_45MT.pdf',
+        sha256_hash: 'hash_101',
+      },
+    ];
+
+    const result = detectDuplicateEvidence(
+      'different_hash_999',
+      undefined,
+      existingFiles,
+      'tata-steel-challan-45mt.pdf'
+    );
+
+    expect(result.isExactDuplicate).toBe(true);
+    expect(result.duplicateOf?.id).toBe('ev-challan-101');
+    expect(result.duplicateOf?.file_name).toBe('Tata_Steel_Challan_45MT.pdf');
+  });
+
   // Test 4: Visual Duplicate Detection (Perceptual dHash)
   it('detects visually similar photos with low Hamming distance', () => {
     const existingFiles = [

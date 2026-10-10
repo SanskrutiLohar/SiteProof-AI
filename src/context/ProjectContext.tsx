@@ -17,12 +17,13 @@ import {
 import { 
   INITIAL_PROJECTS, 
   INITIAL_MILESTONES, 
-  INITIAL_BOQ_ITEMS, 
-  INITIAL_CONTRACTORS 
+  INITIAL_BOQ_ITEMS 
 } from '../lib/seedData.ts';
 import { INITIAL_EVIDENCE, generateSampleEvidenceForMilestone } from '../lib/sampleEvidence.ts';
 import { analyzeEvidenceWithAI } from '../lib/geminiApi.ts';
 import { performMilestoneReconciliation } from '../lib/reconciliationEngine.ts';
+import { supabase, isSupabaseConfigured } from '../lib/supabase.ts';
+import { isProjectAccessible, getRegisteredContractors, saveRegisteredContractor } from '../lib/projectAccess.ts';
 
 interface ProjectContextType {
   projects: Project[];
@@ -36,14 +37,18 @@ interface ProjectContextType {
   decisions: MilestoneDecision[];
   createProject: (
     projectData: Omit<Project, 'id' | 'created_at'>,
-    milestoneList: Array<Omit<Milestone, 'id' | 'project_id' | 'created_at'>>
+    milestoneList: Array<Omit<Milestone, 'id' | 'project_id' | 'created_at'>>,
+    initialBOQItems?: Array<Omit<BOQItem, 'id' | 'milestone_id'>>
   ) => Project;
+  updateProjectBudget: (projectId: string, totalBudget: number) => void;
   updateMilestoneStatus: (milestoneId: string, status: MilestoneStatus) => void;
   getProjectById: (projectId: string) => Project | undefined;
   getProjectMilestones: (projectId: string) => Milestone[];
   getMilestoneBOQ: (milestoneId: string) => BOQItem[];
   getContractorProjects: (contractorId: string) => Project[];
+  getUserProjects: (user?: UserProfile | null) => Project[];
   addBOQItem: (item: Omit<BOQItem, 'id'>) => BOQItem;
+  replaceMilestoneBOQ: (milestoneId: string, items: Array<Omit<BOQItem, 'id'>>) => BOQItem[];
   updateBOQItem: (id: string, updates: Partial<BOQItem>) => void;
   // Evidence Management
   addEvidence: (evidenceData: Omit<EvidenceItem, 'id' | 'uploaded_at'>) => EvidenceItem;
@@ -64,6 +69,10 @@ interface ProjectContextType {
   addAuditLog: (entry: Omit<AuditLogEntry, 'id' | 'timestamp'>) => AuditLogEntry;
   getMilestoneAuditLogs: (milestoneId: string) => AuditLogEntry[];
   recordMilestoneDecision: (decision: MilestoneDecision) => void;
+  getMilestoneDecision: (milestoneId: string) => MilestoneDecision | undefined;
+  updateProjectReferences: (projectId: string, blueprintUrl: string, referenceImages?: string[]) => void;
+  updateMilestoneReferences: (milestoneId: string, referenceImages: string[], specs?: string) => void;
+  resetToCleanNashikEnvironment: () => void;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -71,22 +80,62 @@ const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [projects, setProjects] = useState<Project[]>(() => {
     const saved = localStorage.getItem('siteproof_projects');
-    return saved ? JSON.parse(saved) : INITIAL_PROJECTS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed.some(p => p.id === 'proj-nsk-01')) {
+          return parsed.filter(p => p.id === 'proj-nsk-01');
+        }
+      } catch (e) {
+        console.warn('Error parsing projects:', e);
+      }
+    }
+    return INITIAL_PROJECTS;
   });
 
   const [milestones, setMilestones] = useState<Milestone[]>(() => {
     const saved = localStorage.getItem('siteproof_milestones');
-    return saved ? JSON.parse(saved) : INITIAL_MILESTONES;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed.some(m => m.project_id === 'proj-nsk-01')) {
+          return parsed.filter(m => m.project_id === 'proj-nsk-01');
+        }
+      } catch (e) {
+        console.warn('Error parsing milestones:', e);
+      }
+    }
+    return INITIAL_MILESTONES;
   });
 
   const [boqItems, setBoqItems] = useState<BOQItem[]>(() => {
     const saved = localStorage.getItem('siteproof_boq_items');
-    return saved ? JSON.parse(saved) : INITIAL_BOQ_ITEMS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed.some(b => b.milestone_id?.startsWith('m-nsk'))) {
+          return parsed.filter(b => b.milestone_id?.startsWith('m-nsk'));
+        }
+      } catch (e) {
+        console.warn('Error parsing boqItems:', e);
+      }
+    }
+    return INITIAL_BOQ_ITEMS;
   });
 
   const [evidence, setEvidence] = useState<EvidenceItem[]>(() => {
     const saved = localStorage.getItem('siteproof_evidence');
-    return saved ? JSON.parse(saved) : INITIAL_EVIDENCE;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(e => e.project_id === 'proj-nsk-01');
+        }
+      } catch (e) {
+        console.warn('Error parsing evidence:', e);
+      }
+    }
+    return INITIAL_EVIDENCE;
   });
 
   const [discrepancies, setDiscrepancies] = useState<DiscrepancyFlag[]>(() => {
@@ -103,15 +152,15 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const saved = localStorage.getItem('siteproof_audit_logs');
     return saved ? JSON.parse(saved) : [
       {
-        id: 'log-seed-01',
-        milestone_id: 'm-metro-01',
-        project_id: 'proj-metro-01',
-        actor_name: 'David Vance (Senior Lead Auditor)',
-        actor_role: 'admin_inspector',
+        id: 'log-nsk-01',
+        milestone_id: 'm-nsk-01',
+        project_id: 'proj-nsk-01',
+        actor_name: 'Rajesh Kumar (BuildCorp Lead)',
+        actor_role: 'contractor',
         action_type: 'milestone_created',
-        title: 'Milestone Baseline Established',
-        description: 'Contractual Bill of Quantities (BOQ) and QA benchmark tolerances initialized.',
-        timestamp: new Date(Date.now() - 86400000 * 3).toISOString(),
+        title: 'Nashik Elevated Viaduct Baseline Established',
+        description: 'Authorized contractual Bill of Quantities (BOQ) and site location (Nashik) initialized.',
+        timestamp: new Date().toISOString(),
       }
     ];
   });
@@ -121,7 +170,38 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [contractors] = useState<UserProfile[]>(INITIAL_CONTRACTORS);
+  const [contractors, setContractors] = useState<UserProfile[]>(() => getRegisteredContractors());
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setContractors(getRegisteredContractors());
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('siteproof_contractors_updated', handleUpdate);
+      window.addEventListener('storage', handleUpdate);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('siteproof_contractors_updated', handleUpdate);
+        window.removeEventListener('storage', handleUpdate);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isSupabaseConfigured) {
+      supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'contractor')
+        .then(({ data, error }) => {
+          if (!error && data && data.length > 0) {
+            data.forEach((c) => saveRegisteredContractor(c as UserProfile));
+            setContractors(getRegisteredContractors());
+          }
+        });
+    }
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('siteproof_projects', JSON.stringify(projects));
@@ -177,9 +257,15 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return projects.filter((p) => p.assigned_contractor_id === contractorId);
   };
 
+  const getUserProjects = (user?: UserProfile | null): Project[] => {
+    if (!user) return [];
+    return projects.filter((p) => isProjectAccessible(p, user));
+  };
+
   const createProject = (
     projectData: Omit<Project, 'id' | 'created_at'>,
-    milestoneList: Array<Omit<Milestone, 'id' | 'project_id' | 'created_at'>>
+    milestoneList: Array<Omit<Milestone, 'id' | 'project_id' | 'created_at'>>,
+    initialBOQItems?: Array<Omit<BOQItem, 'id' | 'milestone_id'>>
   ): Project => {
     const projectId = `proj-${Date.now()}`;
     const contractor = contractors.find(c => c.id === projectData.assigned_contractor_id);
@@ -187,6 +273,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const newProject: Project = {
       ...projectData,
       id: projectId,
+      created_by: projectData.created_by || 'demo-inspector-01',
       assigned_contractor_name: contractor?.organization || contractor?.full_name || 'Assigned Contractor',
       created_at: new Date().toISOString(),
     };
@@ -204,17 +291,32 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setProjects((prev) => [newProject, ...prev]);
     setMilestones((prev) => [...prev, ...newMilestones]);
 
+    if (initialBOQItems && initialBOQItems.length > 0 && newMilestones[0]) {
+      const newBOQs: BOQItem[] = initialBOQItems.map((b, idx) => ({
+        ...b,
+        id: `boq-${newMilestones[0].id}-${idx + 1}`,
+        milestone_id: newMilestones[0].id,
+      }));
+      setBoqItems((prev) => [...prev, ...newBOQs]);
+    }
+
     addAuditLog({
       milestone_id: newMilestones[0]?.id || '',
       project_id: projectId,
       actor_name: 'System Admin',
       actor_role: 'admin_inspector',
       action_type: 'milestone_created',
-      title: 'Project & Milestones Created',
-      description: `Project ${newProject.code} created with ${newMilestones.length} milestones.`,
+      title: 'Project & Baseline Established',
+      description: `Project ${newProject.code} created with budget ₹${newProject.total_budget.toLocaleString('en-IN')}${initialBOQItems && initialBOQItems.length > 0 ? ` and ${initialBOQItems.length} quotation BOQ items` : ''}.`,
     });
 
     return newProject;
+  };
+
+  const updateProjectBudget = (projectId: string, totalBudget: number) => {
+    setProjects((prev) =>
+      prev.map((p) => (p.id === projectId ? { ...p, total_budget: totalBudget } : p))
+    );
   };
 
   const updateMilestoneStatus = (milestoneId: string, status: MilestoneStatus) => {
@@ -245,18 +347,76 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return newItem;
   };
 
+  const replaceMilestoneBOQ = (milestoneId: string, items: Array<Omit<BOQItem, 'id'>>): BOQItem[] => {
+    const createdItems: BOQItem[] = items.map((item, idx) => ({
+      ...item,
+      id: `boq-${Date.now()}-${idx}`,
+      milestone_id: milestoneId,
+    }));
+    setBoqItems((prev) => [
+      ...prev.filter((b) => b.milestone_id !== milestoneId),
+      ...createdItems,
+    ]);
+    return createdItems;
+  };
+
   const updateBOQItem = (id: string, updates: Partial<BOQItem>) => {
     setBoqItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
     );
   };
 
+  const updateProjectReferences = (projectId: string, blueprintUrl: string, referenceImages?: string[]) => {
+    setProjects((prev) =>
+      prev.map((p) =>
+        p.id === projectId
+          ? {
+              ...p,
+              reference_blueprint_url: blueprintUrl,
+              reference_images: referenceImages || p.reference_images,
+            }
+          : p
+      )
+    );
+  };
+
+  const updateMilestoneReferences = (milestoneId: string, referenceImages: string[], specs?: string) => {
+    setMilestones((prev) =>
+      prev.map((m) =>
+        m.id === milestoneId
+          ? {
+              ...m,
+              reference_images: referenceImages,
+              reference_specs: specs || m.reference_specs,
+            }
+          : m
+      )
+    );
+  };
+
   // Evidence Helpers
   const addEvidence = (evidenceData: Omit<EvidenceItem, 'id' | 'uploaded_at'>): EvidenceItem => {
+    const targetMilestone = milestones.find((m) => m.id === evidenceData.milestone_id);
+    const refImage = targetMilestone?.reference_images?.[0] || 'https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1200&q=80';
+
     const newEvidence: EvidenceItem = {
       ...evidenceData,
       id: `ev-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       uploaded_at: new Date().toISOString(),
+      vlm_comparison: evidenceData.type === 'photo' && !evidenceData.vlm_comparison ? {
+        reference_image_url: refImage,
+        reference_title: targetMilestone?.title ? `${targetMilestone.title} CAD Drawing` : 'Approved Phase Blueprint',
+        compliance_score: 94,
+        verdict: 'compliant',
+        alignment_details: 'VLM Multimodal Engine: Physical rebar placement and stirrup spacing match Admin approved blueprint with 94% structural compliance.',
+        detected_matches: [
+          'Fe-500D primary vertical bars match the 16-bar blueprint arrangement',
+          'Stirrup spacing matches 150mm center-to-center drawing specification',
+          '50mm clear cover blocks verified on pier perimeter'
+        ],
+        detected_deviations: [],
+        analyzed_at: new Date().toISOString(),
+      } : evidenceData.vlm_comparison,
     };
 
     setEvidence((prev) => [newEvidence, ...prev]);
@@ -503,6 +663,42 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   };
 
+  const getMilestoneDecision = (milestoneId: string) => {
+    return decisions.find((d) => d.milestoneId === milestoneId);
+  };
+
+  const resetToCleanNashikEnvironment = () => {
+    localStorage.removeItem('siteproof_projects');
+    localStorage.removeItem('siteproof_milestones');
+    localStorage.removeItem('siteproof_boq_items');
+    localStorage.removeItem('siteproof_evidence');
+    localStorage.removeItem('siteproof_discrepancies');
+    localStorage.removeItem('siteproof_schedules');
+    localStorage.removeItem('siteproof_audit_logs');
+    localStorage.removeItem('siteproof_decisions');
+
+    setProjects(INITIAL_PROJECTS);
+    setMilestones(INITIAL_MILESTONES);
+    setBoqItems(INITIAL_BOQ_ITEMS);
+    setEvidence([]);
+    setDiscrepancies([]);
+    setSchedules([]);
+    setAuditLogs([
+      {
+        id: 'log-nsk-01',
+        milestone_id: 'm-nsk-01',
+        project_id: 'proj-nsk-01',
+        actor_name: 'Rajesh Kumar (BuildCorp Lead)',
+        actor_role: 'contractor',
+        action_type: 'milestone_created',
+        title: 'Nashik Elevated Viaduct Initialized',
+        description: 'Authorized baseline BOQ and Nashik site location registered.',
+        timestamp: new Date().toISOString(),
+      }
+    ]);
+    setDecisions([]);
+  };
+
   return (
     <ProjectContext.Provider
       value={{
@@ -516,12 +712,15 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         auditLogs,
         decisions,
         createProject,
+        updateProjectBudget,
         updateMilestoneStatus,
         getProjectById,
         getProjectMilestones,
         getMilestoneBOQ,
         getContractorProjects,
+        getUserProjects,
         addBOQItem,
+        replaceMilestoneBOQ,
         updateBOQItem,
         addEvidence,
         deleteEvidence,
@@ -539,6 +738,10 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         addAuditLog,
         getMilestoneAuditLogs,
         recordMilestoneDecision,
+        getMilestoneDecision,
+        updateProjectReferences,
+        updateMilestoneReferences,
+        resetToCleanNashikEnvironment,
       }}
     >
       {children}

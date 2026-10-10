@@ -38,6 +38,8 @@ export interface Milestone {
   status: MilestoneStatus;
   version?: number; // Optimistic Concurrency Control
   boq_items?: BOQItem[];
+  reference_images?: string[]; // Admin uploaded CAD / blueprint reference photos for this phase
+  reference_specs?: string;
   created_at?: string;
 }
 
@@ -51,9 +53,22 @@ export interface Project {
   total_budget: number;
   assigned_contractor_id: string;
   assigned_contractor_name?: string;
+  reference_blueprint_url?: string; // Master project reference blueprint
+  reference_images?: string[]; // Project-wide reference drawings
   created_by?: string;
   created_at?: string;
   milestones?: Milestone[];
+}
+
+export interface VLMComparisonResult {
+  reference_image_url: string;
+  reference_title?: string;
+  compliance_score: number; // 0 - 100
+  verdict: 'compliant' | 'minor_deviation' | 'critical_deviation';
+  alignment_details: string;
+  detected_matches: string[];
+  detected_deviations: string[];
+  analyzed_at: string;
 }
 
 export interface EvidenceItem {
@@ -86,6 +101,7 @@ export interface EvidenceItem {
   ai_analyzed?: boolean;
   ai_summary?: string;
   ai_confidence?: number;
+  vlm_comparison?: VLMComparisonResult;
   tags?: string[];
 }
 
@@ -96,7 +112,7 @@ export interface DiscrepancyFlag {
   severity: 'low' | 'medium' | 'high' | 'critical';
   title: string;
   description: string;
-  flag_type: 'quantity_mismatch' | 'duplicate_document' | 'date_anomaly' | 'visual_incomplete';
+  flag_type: 'quantity_mismatch' | 'duplicate_document' | 'date_anomaly' | 'visual_incomplete' | 'geofence_mismatch';
   status: 'open' | 'investigating' | 'resolved' | 'dismissed';
   created_at: string;
 }

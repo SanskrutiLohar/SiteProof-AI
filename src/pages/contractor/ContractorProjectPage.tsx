@@ -1,37 +1,49 @@
 import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useProjects } from '../../context/ProjectContext.tsx';
+import { isProjectAccessible } from '../../lib/projectAccess.ts';
+import { useAuth } from '../../context/AuthContext.tsx';
 import { MilestoneList } from '../../components/projects/MilestoneList.tsx';
 import { 
   Building2, 
   MapPin, 
-  DollarSign, 
+  IndianRupee, 
   HardHat, 
   ArrowLeft, 
   CheckCircle2, 
   Clock, 
   Sparkles, 
-  Layers 
+  Layers,
+  Lock
 } from 'lucide-react';
 
 export const ContractorProjectPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
+  const { profile } = useAuth();
   const { getProjectById, getProjectMilestones } = useProjects();
 
   const project = getProjectById(projectId || '');
   const milestones = getProjectMilestones(projectId || '');
 
-  if (!project) {
+  if (!project || !isProjectAccessible(project, profile)) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-16 text-center">
-        <h2 className="text-lg font-bold text-white mb-2">Project not found</h2>
-        <p className="text-xs text-slate-400 mb-6">The requested construction contract could not be loaded.</p>
-        <Link 
-          to="/contractor/dashboard" 
-          className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition-all shadow-md"
-        >
-          Return to Contractor Dashboard
-        </Link>
+      <div className="max-w-xl mx-auto px-4 py-20 text-center space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400 shadow-lg shadow-amber-950/30">
+          <Lock className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-white tracking-tight">Private Contract Workspace</h2>
+        <p className="text-xs sm:text-sm text-slate-400 max-w-md mx-auto leading-relaxed">
+          This construction contract is private and confidential. You do not have authorization to view this project.
+        </p>
+        <div className="pt-2">
+          <Link 
+            to="/contractor/dashboard" 
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition-all shadow-md"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Return to Assigned Contracts
+          </Link>
+        </div>
       </div>
     );
   }
@@ -77,8 +89,8 @@ export const ContractorProjectPage: React.FC = () => {
               {project.location}
             </span>
             <span className="flex items-center gap-1.5">
-              <DollarSign className="w-4 h-4 text-emerald-400" />
-              Budget: ${project.total_budget.toLocaleString()}
+              <IndianRupee className="w-4 h-4 text-emerald-400" />
+              Budget: ₹{project.total_budget.toLocaleString('en-IN')}
             </span>
             <span className="flex items-center gap-1.5">
               <Building2 className="w-4 h-4 text-blue-400" />

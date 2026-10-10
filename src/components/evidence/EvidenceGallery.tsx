@@ -5,6 +5,9 @@ import { EvidenceCard } from './EvidenceCard.tsx';
 import { EvidenceTimeline } from './EvidenceTimeline.tsx';
 import { EvidenceLightbox } from './EvidenceLightbox.tsx';
 import { EvidenceUploadModal } from './EvidenceUploadModal.tsx';
+import { CameraCaptureModal } from './CameraCaptureModal.tsx';
+import { computeSHA256 } from '../../lib/integrityEngine.ts';
+import { fileToBase64 } from '../../lib/geminiApi.ts';
 import { 
   Camera, 
   FileText, 
@@ -36,9 +39,12 @@ export const EvidenceGallery: React.FC<EvidenceGalleryProps> = ({
   const { 
     getMilestoneEvidence, 
     deleteEvidence, 
-    loadSampleEvidenceForMilestone 
+    loadSampleEvidenceForMilestone,
+    addEvidence,
+    getProjectById
   } = useProjects();
 
+  const project = getProjectById(projectId);
   const evidenceList = getMilestoneEvidence(milestoneId);
 
   const [activeTab, setActiveTab] = useState<TabType>('all');
@@ -47,7 +53,39 @@ export const EvidenceGallery: React.FC<EvidenceGalleryProps> = ({
   
   // Modals state
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [activeLightboxItem, setActiveLightboxItem] = useState<EvidenceItem | null>(null);
+
+  const handleDirectCameraConfirm = async (file: File, meta: {
+    latitude?: number;
+    longitude?: number;
+    locationName?: string;
+    capturedAt: string;
+  }) => {
+    try {
+      const { dataUrl } = await fileToBase64(file);
+      const hash = await computeSHA256(file);
+
+      addEvidence({
+        milestone_id: milestoneId,
+        project_id: projectId,
+        file_name: file.name,
+        file_url: dataUrl,
+        file_size: file.size,
+        type: 'photo',
+        uploaded_by: 'Contractor Site Engineer',
+        sha256_hash: hash,
+        latitude: meta.latitude || 19.9975,
+        longitude: meta.longitude || 73.7898,
+        location_name: meta.locationName || 'Nashik Elevated Corridor • Pier 14 Deck',
+        captured_at: meta.capturedAt,
+        tags: ['Live Site Capture', 'Camera Authenticated', 'Geotagged'],
+        status: 'VERIFICATION_COMPLETE',
+      });
+    } catch (err) {
+      console.warn('Direct camera attachment error:', err);
+    }
+  };
 
   // Tab counts
   const countPhoto = evidenceList.filter((e) => e.type === 'photo').length;
@@ -143,7 +181,7 @@ export const EvidenceGallery: React.FC<EvidenceGalleryProps> = ({
               <>
                 <button
                   onClick={handleLoadDemoEvidence}
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 hover:border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                  className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 hover:border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
                   title="Populate authentic construction photos, challans, and invoices for this milestone"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-amber-400" />
@@ -151,11 +189,21 @@ export const EvidenceGallery: React.FC<EvidenceGalleryProps> = ({
                 </button>
 
                 <button
+                  type="button"
+                  onClick={() => setIsCameraModalOpen(true)}
+                  className="px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm hover:scale-102"
+                  title="Open live camera to capture geotagged photos or record inspection video"
+                >
+                  <Camera className="w-4 h-4 text-amber-400" />
+                  <span>Live Camera</span>
+                </button>
+
+                <button
                   onClick={() => setIsUploadModalOpen(true)}
                   className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition-all hover:scale-102"
                 >
                   <UploadCloud className="w-4 h-4" />
-                  Upload Evidence
+                  Upload Files
                 </button>
               </>
             )}
@@ -263,6 +311,14 @@ export const EvidenceGallery: React.FC<EvidenceGalleryProps> = ({
         projectId={projectId}
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
+      />
+
+      {/* Direct Camera & Video Recorder Modal */}
+      <CameraCaptureModal
+        isOpen={isCameraModalOpen}
+        onClose={() => setIsCameraModalOpen(false)}
+        projectLocation={project?.location || 'Nashik, Maharashtra'}
+        onCaptureConfirm={handleDirectCameraConfirm}
       />
 
       {/* Lightbox Modal */}

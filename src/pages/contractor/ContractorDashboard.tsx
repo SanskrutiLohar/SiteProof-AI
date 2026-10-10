@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext.tsx';
 import { useProjects } from '../../context/ProjectContext.tsx';
 import { ProjectCard } from '../../components/projects/ProjectCard.tsx';
@@ -8,19 +8,23 @@ import {
   UploadCloud, 
   Calendar,
   Building2,
-  AlertCircle
+  RotateCcw,
+  Lock
 } from 'lucide-react';
 
 export const ContractorDashboard: React.FC = () => {
   const { profile } = useAuth();
-  const { projects, getContractorProjects } = useProjects();
+  const { getUserProjects, resetToCleanNashikEnvironment } = useProjects();
+  const [resetSuccess, setResetSuccess] = useState(false);
 
-  // If logged in as contractor persona, get their projects, or default to all assigned demo projects
-  const assignedProjects = profile?.id.startsWith('demo-')
-    ? projects.filter(p => p.assigned_contractor_id === 'demo-contractor-01')
-    : getContractorProjects(profile?.id || '');
+  const handleCleanReset = () => {
+    resetToCleanNashikEnvironment();
+    setResetSuccess(true);
+    setTimeout(() => setResetSuccess(false), 2000);
+  };
 
-  const displayProjects = assignedProjects.length > 0 ? assignedProjects : projects;
+  // Strictly filter projects assigned to or created by this contractor account
+  const displayProjects = getUserProjects(profile);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -41,11 +45,21 @@ export const ContractorDashboard: React.FC = () => {
           </p>
         </div>
 
-        <div className="bg-slate-900/90 px-4 py-3 rounded-xl border border-slate-800 text-right shrink-0">
-          <div className="text-[10px] uppercase font-bold text-slate-400">Assigned Organization</div>
-          <div className="text-sm font-bold text-amber-400 flex items-center gap-1 justify-end mt-0.5">
-            <Building2 className="w-3.5 h-3.5" />
-            {profile?.organization || 'BuildCorp Infrastructure Ltd'}
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={handleCleanReset}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 transition-all shadow-sm"
+            title="Reset database to fresh Nashik Elevated Viaduct project"
+          >
+            <RotateCcw className={`w-3.5 h-3.5 text-amber-400 ${resetSuccess ? 'animate-spin' : ''}`} />
+            {resetSuccess ? 'Reset Complete!' : 'Clean Nashik Reset'}
+          </button>
+          <div className="bg-slate-900/90 px-4 py-2.5 rounded-xl border border-slate-800 text-right">
+            <div className="text-[10px] uppercase font-bold text-slate-400">Assigned Org</div>
+            <div className="text-xs font-bold text-amber-400 flex items-center gap-1 justify-end mt-0.5">
+              <Building2 className="w-3.5 h-3.5" />
+              {profile?.organization || 'BuildCorp Infrastructure Ltd'}
+            </div>
           </div>
         </div>
       </div>
@@ -89,10 +103,14 @@ export const ContractorDashboard: React.FC = () => {
             ))}
           </div>
         ) : (
-          <div className="p-12 text-center glass-panel rounded-2xl border border-slate-800">
-            <AlertCircle className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-            <h3 className="text-sm font-bold text-slate-300">No projects currently assigned</h3>
-            <p className="text-xs text-slate-500 mt-1">Contact your lead project auditor to be assigned to active milestones.</p>
+          <div className="p-12 text-center glass-panel rounded-2xl border border-slate-800 space-y-2">
+            <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-slate-700 flex items-center justify-center mx-auto text-amber-400">
+              <Lock className="w-6 h-6" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-200">No projects assigned to your account</h3>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              All infrastructure contracts are strictly confidential and anonymous. Projects assigned to other contractors or managed by other authorities are inaccessible to your account.
+            </p>
           </div>
         )}
       </div>

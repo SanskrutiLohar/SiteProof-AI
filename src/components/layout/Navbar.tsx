@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.tsx';
 import { DemoPersonaSwitcher } from './DemoPersonaSwitcher.tsx';
-import { AISettingsModal } from '../ai/AISettingsModal.tsx';
 import { 
   Building2, 
   LayoutDashboard, 
@@ -16,7 +15,6 @@ export const Navbar: React.FC = () => {
   const { profile, role, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [isAISettingsOpen, setIsAISettingsOpen] = useState(false);
 
   const handleLogout = async () => {
     await signOut();
@@ -25,8 +23,8 @@ export const Navbar: React.FC = () => {
 
   const isAdmin = role === 'admin_inspector';
 
-  // Do not show top navigation on login route or when unauthenticated
-  if (!profile || location.pathname === '/login') {
+  // Do not show top dashboard navigation on landing / login routes or when unauthenticated
+  if (!profile || location.pathname === '/' || location.pathname === '/login') {
     return null;
   }
 
@@ -95,16 +93,6 @@ export const Navbar: React.FC = () => {
         <div className="flex items-center gap-3">
           {profile ? (
             <>
-              {/* AI Key Settings Trigger */}
-              <button
-                onClick={() => setIsAISettingsOpen(true)}
-                className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-amber-300 hover:text-amber-200 border border-slate-700 hover:border-amber-500/40 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
-                title="Configure Gemini API Key"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden sm:inline">AI Settings</span>
-              </button>
-
               {/* Demo Persona Switcher */}
               <DemoPersonaSwitcher />
 
@@ -141,12 +129,6 @@ export const Navbar: React.FC = () => {
           )}
         </div>
       </div>
-
-      {/* AI Settings Modal */}
-      <AISettingsModal
-        isOpen={isAISettingsOpen}
-        onClose={() => setIsAISettingsOpen(false)}
-      />
     </header>
   );
 };

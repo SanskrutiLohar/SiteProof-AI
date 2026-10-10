@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { EvidenceItem } from '../../types/index.ts';
 import { OCRExtractionModal } from './OCRExtractionModal.tsx';
+import { validateEvidenceGeofence } from '../../lib/geoDistance.ts';
 import { 
   X, 
   ChevronLeft, 
@@ -14,7 +15,8 @@ import {
   ExternalLink,
   ZoomIn,
   ZoomOut,
-  Maximize2
+  Maximize2,
+  AlertTriangle
 } from 'lucide-react';
 
 interface EvidenceLightboxProps {
@@ -281,31 +283,51 @@ export const EvidenceLightbox: React.FC<EvidenceLightboxProps> = ({
               </div>
 
               {/* Location & GPS */}
-              <div className="p-3 rounded-xl bg-slate-800/40 border border-slate-800 space-y-2">
-                <div className="flex items-start gap-3">
-                  <MapPin className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="text-[11px] text-slate-400 block">Site Location</span>
-                    <strong className="text-slate-200">{evidence.location_name || 'Unspecified'}</strong>
-                  </div>
-                </div>
+              {(() => {
+                const geo = validateEvidenceGeofence(evidence.latitude, evidence.longitude, 'Nashik, Maharashtra');
+                return (
+                  <div className="p-3 rounded-xl bg-slate-800/40 border border-slate-800 space-y-2">
+                    <div className="flex items-start gap-3">
+                      <MapPin className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="text-[11px] text-slate-400 block">Site Location</span>
+                        <strong className="text-slate-200">{evidence.location_name || 'Unspecified'}</strong>
+                      </div>
+                    </div>
 
-                {evidence.latitude && evidence.longitude && (
-                  <div className="pt-2 border-t border-slate-700/50 flex items-center justify-between font-mono text-[11px]">
-                    <span className="text-slate-400">
-                      GPS: {evidence.latitude.toFixed(5)}°, {evidence.longitude.toFixed(5)}°
-                    </span>
-                    <a
-                      href={`https://www.google.com/maps?q=${evidence.latitude},${evidence.longitude}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-amber-400 hover:underline flex items-center gap-1"
-                    >
-                      Open Map <ExternalLink className="w-3 h-3" />
-                    </a>
+                    {evidence.latitude && evidence.longitude && (
+                      <div className="pt-2 border-t border-slate-700/50 space-y-2">
+                        <div className="flex items-center justify-between font-mono text-[11px]">
+                          <span className="text-slate-400">
+                            GPS: {evidence.latitude.toFixed(5)}°, {evidence.longitude.toFixed(5)}°
+                          </span>
+                          <a
+                            href={`https://www.google.com/maps?q=${evidence.latitude},${evidence.longitude}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-amber-400 hover:underline flex items-center gap-1"
+                          >
+                            Open Map <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+
+                        {geo.isMismatch ? (
+                          <div className="p-2 rounded-lg bg-rose-500/15 border border-rose-500/30 text-[11px] text-rose-300 flex items-start gap-1.5">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                            <span>
+                              <strong>Location Mismatch:</strong> Captured <strong>{geo.distanceKm} km</strong> away from authorized Nashik project site.
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="text-[10px] text-emerald-400 flex items-center gap-1">
+                            <span>✓ Geofence Verified (In Nashik Zone)</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                );
+              })()}
 
               {/* Uploader */}
               <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-800/40 border border-slate-800">

@@ -23,10 +23,11 @@ export interface ExtractedLineItem {
 }
 
 export interface DocumentOCRResult {
-  documentType: 'challan' | 'invoice' | 'inspection_report';
+  documentType: 'challan' | 'invoice' | 'inspection_report' | 'quotation';
   vendorName: string;
   documentNumber: string;
   documentDate: string;
+  gstNumber?: string;
   extractedItems: ExtractedLineItem[];
   totalAmount?: number;
   taxAmount?: number;

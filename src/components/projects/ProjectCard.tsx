@@ -4,11 +4,12 @@ import { useProjects } from '../../context/ProjectContext.tsx';
 import { 
   Building2, 
   MapPin, 
-  DollarSign, 
+  IndianRupee, 
   HardHat, 
   ArrowRight,
   CheckCircle2,
-  Clock
+  Clock,
+  FileSpreadsheet
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -91,17 +92,30 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, isContractor 
       {/* Footer info & CTA */}
       <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1 text-xs font-semibold text-slate-200">
-          <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
-          ${project.total_budget.toLocaleString()}
+          <IndianRupee className="w-3.5 h-3.5 text-emerald-400" />
+          ₹{project.total_budget.toLocaleString('en-IN')}
         </div>
 
-        <Link
-          to={targetLink}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 transition-all group-hover:shadow-glow-brand"
-        >
-          {isContractor ? 'Submit Evidence' : 'Audit Cockpit'}
-          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-        </Link>
+        <div className="flex items-center gap-1.5">
+          {!isContractor && (
+            <Link
+              to={`/admin/project/${project.id}?tab=boq`}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-all"
+              title="Upload or inspect quotation baseline"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
+              <span>Quotation</span>
+            </Link>
+          )}
+
+          <Link
+            to={targetLink}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 transition-all group-hover:shadow-glow-brand"
+          >
+            {isContractor ? 'Submit Evidence' : 'Audit Cockpit'}
+            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+        </div>
       </div>
     </div>
   );
