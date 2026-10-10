@@ -34,13 +34,25 @@ export const InspectorDecisionModal: React.FC<InspectorDecisionModalProps> = ({
   const { 
     getMilestoneDiscrepancies,
     resolveDiscrepancy,
-    recordMilestoneDecision
+    recordMilestoneDecision,
+    getMilestoneDecision,
+    getMilestoneEvidence
   } = useProjects();
 
-  const [decisionType, setDecisionType] = useState<'approve' | 'reject' | 'request_evidence'>('approve');
-  const [remarks, setRemarks] = useState('');
-  const [digitalSignature, setDigitalSignature] = useState(profile?.full_name || '');
-  const [overrideCritical, setOverrideCritical] = useState(false);
+  const existingDecision = getMilestoneDecision(milestoneId);
+  const evidenceList = getMilestoneEvidence(milestoneId);
+  const hasEvidence = evidenceList.length > 0;
+
+  const [decisionType, setDecisionType] = useState<'approve' | 'reject' | 'request_evidence'>(() => {
+    if (!hasEvidence) return 'request_evidence';
+    if (!existingDecision) return 'approve';
+    if (existingDecision.status === 'verified') return 'approve';
+    if (existingDecision.status === 'rejected') return 'reject';
+    return 'request_evidence';
+  });
+  const [remarks, setRemarks] = useState(() => existingDecision?.decisionRemarks || '');
+  const [digitalSignature, setDigitalSignature] = useState(() => existingDecision?.digitalSignature || profile?.full_name || '');
+  const [overrideCritical, setOverrideCritical] = useState(() => existingDecision?.overrideCriticalFlags || false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -72,6 +84,11 @@ export const InspectorDecisionModal: React.FC<InspectorDecisionModalProps> = ({
     }
 
     if (decisionType === 'approve') {
+      if (!hasEvidence) {
+        setErrorMsg('🚨 Cannot Approve: Contractor has not uploaded any site evidence (photos, delivery challans, or invoices) for this milestone.');
+        return;
+      }
+
       const allChecked = Object.values(checks).every(Boolean);
       if (!allChecked) {
         setErrorMsg('Please complete and verify all pre-flight inspection checklist items.');
@@ -146,6 +163,17 @@ export const InspectorDecisionModal: React.FC<InspectorDecisionModalProps> = ({
           </button>
         </div>
 
+        {/* Missing Evidence Warning Alert */}
+        {!hasEvidence && (
+          <div className="p-3.5 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs flex items-start gap-2.5 animate-fadeIn">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <strong className="block text-amber-200">No Contractor Evidence Submitted Yet:</strong>
+              <span>Official approval is locked because the contractor has not uploaded any site photographs, delivery challans, or invoices for this milestone. You may submit an official Request for Evidence.</span>
+            </div>
+          </div>
+        )}
+
         {/* Feedback Alert */}
         {errorMsg && (
           <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
@@ -158,15 +186,19 @@ export const InspectorDecisionModal: React.FC<InspectorDecisionModalProps> = ({
         <div className="grid grid-cols-3 gap-3">
           <button
             type="button"
-            onClick={() => setDecisionType('approve')}
+            disabled={!hasEvidence}
+            onClick={() => hasEvidence && setDecisionType('approve')}
             className={`p-3.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all ${
-              decisionType === 'approve'
+              !hasEvidence
+                ? 'opacity-40 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-500'
+                : decisionType === 'approve'
                 ? 'bg-emerald-500/20 border-emerald-500/80 text-emerald-300 shadow-lg shadow-emerald-500/10'
                 : 'bg-slate-800/60 border-slate-700/60 text-slate-400 hover:text-slate-200'
             }`}
           >
             <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-            Approve Milestone
+            <span>Approve Milestone</span>
+            {!hasEvidence && <span className="text-[9px] text-rose-400 font-mono">Evidence Required</span>}
           </button>
 
           <button
@@ -179,7 +211,7 @@ export const InspectorDecisionModal: React.FC<InspectorDecisionModalProps> = ({
             }`}
           >
             <XCircle className="w-5 h-5 text-rose-400" />
-            Reject Milestone
+            <span>Reject Milestone</span>
           </button>
 
           <button
@@ -192,7 +224,7 @@ export const InspectorDecisionModal: React.FC<InspectorDecisionModalProps> = ({
             }`}
           >
             <HelpCircle className="w-5 h-5 text-amber-400" />
-            Request Information
+            <span>Request Information</span>
           </button>
         </div>
 

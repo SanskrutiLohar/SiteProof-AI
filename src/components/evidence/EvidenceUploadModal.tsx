@@ -8,6 +8,7 @@ import {
   detectDuplicateEvidence,
   DuplicateDetectionResult 
 } from '../../lib/integrityEngine.ts';
+import { validateEvidenceGeofence } from '../../lib/geoDistance.ts';
 import { CameraCaptureModal } from './CameraCaptureModal.tsx';
 import { supabase, isSupabaseConfigured } from '../../lib/supabase.ts';
 import { 
@@ -25,7 +26,8 @@ import {
   Compass,
   Tag,
   ShieldAlert,
-  Hash
+  Hash,
+  AlertTriangle
 } from 'lucide-react';
 
 interface EvidenceUploadModalProps {
@@ -43,8 +45,9 @@ export const EvidenceUploadModal: React.FC<EvidenceUploadModalProps> = ({
   onClose,
   defaultType = 'photo'
 }) => {
-  const { addEvidence, getMilestoneBOQ, getMilestoneEvidence } = useProjects();
+  const { addEvidence, getMilestoneBOQ, getMilestoneEvidence, getProjectById } = useProjects();
   const { profile } = useAuth();
+  const project = getProjectById(projectId);
   const boqItems = getMilestoneBOQ(milestoneId);
   const existingMilestoneEvidence = getMilestoneEvidence(milestoneId);
 
@@ -65,6 +68,9 @@ export const EvidenceUploadModal: React.FC<EvidenceUploadModalProps> = ({
   const [selectedBOQId, setSelectedBOQId] = useState<string>('');
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
+
+  // Geofence Validation
+  const geofence = validateEvidenceGeofence(latitude, longitude, project?.location || 'Nashik, Maharashtra');
 
   // Integrity & Hash indicators
   const [sha256Hash, setSha256Hash] = useState<string>('');
@@ -106,18 +112,23 @@ export const EvidenceUploadModal: React.FC<EvidenceUploadModalProps> = ({
         setCapturedAt(parsed.dateTime.slice(0, 16));
       }
 
-      // 2. Compute Hashes
+      // 2. Compute Hashes & Detect Duplicates
       try {
         const hash = await computeSHA256(file);
         setSha256Hash(hash);
 
-        const pHash = await computePerceptualHash(file);
-        setPerceptualHash(pHash);
+        let pHash: string | undefined = undefined;
+        if (file.type.includes('image')) {
+          pHash = await computePerceptualHash(file);
+          setPerceptualHash(pHash);
+        }
 
-        // 3. Detect exact or visual duplicates
-        const dupResult = detectDuplicateEvidence(hash, pHash, existingMilestoneEvidence);
+        // 3. Detect exact, visual, or filename duplicates against current milestone
+        const dupResult = detectDuplicateEvidence(hash, pHash, existingMilestoneEvidence, file.name);
         if (dupResult.isExactDuplicate || dupResult.isVisualDuplicate) {
           setDuplicateWarning(dupResult);
+          const docLabel = evidenceType === 'challan' ? 'Delivery challan' : 'Document';
+          setErrorMsg(`This ${docLabel} already exists for this milestone phase. Duplicate upload is not allowed.`);
         }
       } catch (hErr) {
         console.warn('Hash computation warning:', hErr);
@@ -130,9 +141,10 @@ export const EvidenceUploadModal: React.FC<EvidenceUploadModalProps> = ({
       try {
         const hash = await computeSHA256(file);
         setSha256Hash(hash);
-        const dupResult = detectDuplicateEvidence(hash, undefined, existingMilestoneEvidence);
+        const dupResult = detectDuplicateEvidence(hash, undefined, existingMilestoneEvidence, file.name);
         if (dupResult.isExactDuplicate) {
           setDuplicateWarning(dupResult);
+          setErrorMsg('This delivery challan already exists for this milestone phase. Duplicate upload is not allowed.');
         }
       } catch (hErr) {
         console.warn('Hash error:', hErr);
@@ -206,6 +218,12 @@ export const EvidenceUploadModal: React.FC<EvidenceUploadModalProps> = ({
     e.preventDefault();
     if (!selectedFile && !previewUrl) {
       setErrorMsg('Please select a file or take a photograph to upload.');
+      return;
+    }
+
+    if (duplicateWarning?.isExactDuplicate || duplicateWarning?.isVisualDuplicate) {
+      const docTypeLabel = evidenceType === 'challan' ? 'Delivery challan' : 'Document';
+      setErrorMsg(`This ${docTypeLabel} already exists for this milestone phase. Duplicate upload is not allowed.`);
       return;
     }
 
@@ -323,19 +341,41 @@ export const EvidenceUploadModal: React.FC<EvidenceUploadModalProps> = ({
           )}
 
           {duplicateWarning && (
-            <div className="p-3.5 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-200 text-xs space-y-1">
-              <div className="flex items-center gap-2 font-bold text-amber-300">
-                <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+            <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs space-y-1 animate-fadeIn">
+              <div className="flex items-center gap-2 font-bold text-rose-300">
+                <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
                 <span>
-                  {duplicateWarning.isExactDuplicate
-                    ? '⚠️ Exact Duplicate File Detected'
+                  {evidenceType === 'challan'
+                    ? '⚠️ Delivery Challan Already Exists'
+                    : duplicateWarning.isExactDuplicate
+                    ? '⚠️ Duplicate Document Already Exists'
                     : `⚠️ Visual Similarity Warning (${duplicateWarning.duplicateOf?.similarityPercentage}% match)`}
                 </span>
               </div>
-              <p className="text-[11px] text-amber-300/80">
-                {duplicateWarning.isExactDuplicate
-                  ? `This exact file was already uploaded as "${duplicateWarning.duplicateOf?.file_name}". Re-submitting duplicate files will be flagged in audit.`
-                  : `This image appears visually identical or very similar to "${duplicateWarning.duplicateOf?.file_name}".`}
+              <p className="text-[11px] text-rose-200/90 leading-relaxed">
+                {evidenceType === 'challan'
+                  ? `The delivery challan "${duplicateWarning.duplicateOf?.file_name}" already exists for this milestone phase. Uploading duplicate challans is strictly prohibited.`
+                  : duplicateWarning.isExactDuplicate
+                  ? `The document "${duplicateWarning.duplicateOf?.file_name}" already exists for this phase. Re-submitting duplicate files is not allowed.`
+                  : `This document appears visually identical to "${duplicateWarning.duplicateOf?.file_name}" already uploaded in this phase.`}
+              </p>
+            </div>
+          )}
+
+          {/* Geofence Mismatch Warning Banner */}
+          {geofence.isMismatch && (
+            <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs space-y-1.5 animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 font-bold text-rose-300">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>⚠️ Location Mismatch Alert ({geofence.distanceKm} km Away)</span>
+                </div>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800 font-bold">
+                  Geofence Deviation
+                </span>
+              </div>
+              <p className="text-[11px] text-rose-200/90 leading-relaxed">
+                The evidence coordinates are located <strong>{geofence.distanceKm} km</strong> away from the authorized project site in <strong>{project?.location || 'Nashik'}</strong>. Antigravity AI audit verification will flag this location anomaly for inspector review.
               </p>
             </div>
           )}
@@ -553,6 +593,31 @@ export const EvidenceUploadModal: React.FC<EvidenceUploadModalProps> = ({
                     className="w-full px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-amber-400"
                   />
                 </div>
+                {/* 1-Click Demo GPS Presets */}
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLatitude(19.9975);
+                      setLongitude(73.7898);
+                      if (!locationName) setLocationName('Nashik Sector 4 Elevated Viaduct Site');
+                    }}
+                    className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition-all font-semibold"
+                  >
+                    📍 Set Nashik Site (In-Zone)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLatitude(19.0760);
+                      setLongitude(72.8777);
+                      setLocationName('Mumbai Bandra Site (~142.8 km Mismatch)');
+                    }}
+                    className="text-[10px] px-2 py-0.5 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition-all font-semibold"
+                  >
+                    📍 Set Mumbai (Mismatch)
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -683,7 +748,7 @@ export const EvidenceUploadModal: React.FC<EvidenceUploadModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={isUploading || (!selectedFile && !previewUrl)}
+                disabled={isUploading || (!selectedFile && !previewUrl) || !!duplicateWarning}
                 className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold flex items-center gap-2 shadow-lg shadow-amber-500/20 transition-all hover:scale-102 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <UploadCloud className="w-4 h-4" />
@@ -698,6 +763,7 @@ export const EvidenceUploadModal: React.FC<EvidenceUploadModalProps> = ({
       <CameraCaptureModal
         isOpen={isCameraModalOpen}
         onClose={() => setIsCameraModalOpen(false)}
+        projectLocation={project?.location || 'Nashik, Maharashtra'}
         onCaptureConfirm={handleCameraCaptureConfirm}
       />
     </>

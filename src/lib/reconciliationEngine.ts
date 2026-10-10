@@ -1,5 +1,6 @@
 import { BOQItem, EvidenceItem, DiscrepancyFlag } from '../types/index.ts';
 import { MilestoneReconciliationReport } from '../types/ai.ts';
+import { validateEvidenceGeofence } from './geoDistance.ts';
 
 /**
  * 5-Stage Contractual Quantity Reconciliation & Anomaly Engine
@@ -10,7 +11,8 @@ import { MilestoneReconciliationReport } from '../types/ai.ts';
 export function performMilestoneReconciliation(
   milestoneId: string,
   boqItems: BOQItem[],
-  evidenceList: EvidenceItem[]
+  evidenceList: EvidenceItem[],
+  projectLocation: string = 'Nashik, Maharashtra'
 ): {
   report: MilestoneReconciliationReport;
   discrepancies: DiscrepancyFlag[];
@@ -41,6 +43,26 @@ export function performMilestoneReconciliation(
       });
     } else {
       seenDocNumbers.add(docNum);
+    }
+  });
+
+  // Check 2: Geofence Location Verification
+  evidenceList.forEach((ev) => {
+    if (ev.latitude && ev.longitude) {
+      const geoCheck = validateEvidenceGeofence(ev.latitude, ev.longitude, projectLocation);
+      if (geoCheck.isMismatch) {
+        discrepancies.push({
+          id: `flag-geo-${ev.id}-${Date.now()}`,
+          milestone_id: milestoneId,
+          evidence_id: ev.id,
+          severity: 'critical',
+          title: `Geofence Mismatch: ${geoCheck.distanceKm} km Deviation (${ev.file_name})`,
+          description: `Evidence was uploaded from ${ev.location_name || 'unspecified coordinates'} (${ev.latitude.toFixed(4)}°, ${ev.longitude.toFixed(4)}°), which is ${geoCheck.distanceKm} km away from authorized project site in ${projectLocation}.`,
+          flag_type: 'geofence_mismatch',
+          status: 'open',
+          created_at: new Date().toISOString(),
+        });
+      }
     }
   });
 

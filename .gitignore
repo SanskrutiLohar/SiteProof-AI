@@ -1,7 +1,25 @@
-node_modules
-dist
-dist-ssr
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+
+# Local environment files and secrets
 *.local
 .env
-.env.local
+.env.*
+!.env.example
+
+# Operating system files
 .DS_Store
+Thumbs.db
+
+# Playwright test output
+test-results/
+playwright-report/
+playwright/.cache/
+test-results-target-*.json
+
+# Debug logs
+npm-debug.log*

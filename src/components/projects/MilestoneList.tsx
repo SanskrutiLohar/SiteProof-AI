@@ -7,7 +7,8 @@ import {
   ChevronRight, 
   Calendar, 
   Layers,
-  ShieldCheck
+  ShieldCheck,
+  FileSpreadsheet
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -110,13 +111,24 @@ export const MilestoneList: React.FC<MilestoneListProps> = ({
               {getStatusBadge(m.status)}
 
               {!isContractor ? (
-                <Link
-                  to={`/admin/verify/${m.id}`}
-                  className="px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/40 text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
-                  Verify Cockpit
-                </Link>
+                <div className="flex items-center gap-1.5">
+                  <Link
+                    to={`/admin/project/${projectId}?milestone=${m.id}&tab=boq`}
+                    className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-semibold transition-all flex items-center gap-1"
+                    title="Inspect or upload quotation baseline"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
+                    Quotation
+                  </Link>
+
+                  <Link
+                    to={`/admin/verify/${m.id}`}
+                    className="px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/40 text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+                    Verify Cockpit
+                  </Link>
+                </div>
               ) : (
                 <Link to={linkUrl} className="p-1 text-slate-500 hover:text-white">
                   <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />

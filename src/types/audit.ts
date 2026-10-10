@@ -23,6 +23,7 @@ export interface AuditLogEntry {
   actor_role: 'admin_inspector' | 'contractor' | 'system_ai';
   action_type: 
     | 'milestone_created'
+    | 'milestone_updated'
     | 'evidence_uploaded'
     | 'ai_analyzed'
     | 'discrepancy_flagged'

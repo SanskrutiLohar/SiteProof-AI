@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext.tsx';
+import { AuthProvider } from './context/AuthContext.tsx';
 import { ProjectProvider } from './context/ProjectContext.tsx';
 import { Navbar } from './components/layout/Navbar.tsx';
 import { ProtectedRoute } from './components/layout/ProtectedRoute.tsx';
@@ -9,16 +9,8 @@ import { AdminDashboard } from './pages/admin/AdminDashboard.tsx';
 import { ProjectDetailsPage } from './pages/admin/ProjectDetailsPage.tsx';
 import { InspectorVerificationCockpit } from './pages/admin/InspectorVerificationCockpit.tsx';
 import { ContractorDashboard } from './pages/contractor/ContractorDashboard.tsx';
+import { ContractorProjectPage } from './pages/contractor/ContractorProjectPage.tsx';
 import { ContractorMilestonePage } from './pages/contractor/ContractorMilestonePage.tsx';
-
-// Root redirect based on role
-const RootRedirect: React.FC = () => {
-  const { profile, role } = useAuth();
-  if (!profile) {
-    return <Navigate to="/login" replace />;
-  }
-  return <Navigate to={role === 'admin_inspector' ? '/admin/dashboard' : '/contractor/dashboard'} replace />;
-};
 
 export const App: React.FC = () => {
   return (
@@ -29,7 +21,7 @@ export const App: React.FC = () => {
             <Navbar />
             <main className="flex-1 pb-16">
               <Routes>
-                <Route path="/" element={<RootRedirect />} />
+                <Route path="/" element={<AuthPage />} />
                 <Route path="/login" element={<AuthPage />} />
 
                 {/* Admin / Inspector Routes */}
@@ -71,7 +63,7 @@ export const App: React.FC = () => {
                   path="/contractor/project/:projectId"
                   element={
                     <ProtectedRoute allowedRoles={['contractor']}>
-                      <ContractorDashboard />
+                      <ContractorProjectPage />
                     </ProtectedRoute>
                   }
                 />

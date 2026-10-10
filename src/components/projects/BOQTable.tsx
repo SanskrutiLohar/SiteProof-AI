@@ -29,7 +29,7 @@ export const BOQTable: React.FC<BOQTableProps> = ({ items, showReconciliation = 
           </h3>
         </div>
         <div className="text-xs text-slate-400">
-          Target Value: <span className="font-bold text-white">${totalValue.toLocaleString()}</span>
+          Target Value: <span className="font-bold text-white">₹{totalValue.toLocaleString('en-IN')}</span>
         </div>
       </div>
 
@@ -49,7 +49,7 @@ export const BOQTable: React.FC<BOQTableProps> = ({ items, showReconciliation = 
                   <th className="px-4 py-3 font-semibold text-center">Status</th>
                 </>
               )}
-              <th className="px-4 py-3 font-semibold text-right">Total (USD)</th>
+              <th className="px-4 py-3 font-semibold text-right">Total (INR)</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
@@ -67,21 +67,21 @@ export const BOQTable: React.FC<BOQTableProps> = ({ items, showReconciliation = 
                     {item.description}
                   </td>
                   <td className="px-4 py-3 text-right text-slate-400">
-                    ${item.unit_rate.toLocaleString()} / {item.unit}
+                    ₹{item.unit_rate.toLocaleString('en-IN')} / {item.unit}
                   </td>
                   <td className="px-4 py-3 text-right font-bold text-white">
-                    {item.quantity_ordered.toLocaleString()} <span className="text-[10px] font-normal text-slate-400">{item.unit}</span>
+                    {item.quantity_ordered.toLocaleString('en-IN')} <span className="text-[10px] font-normal text-slate-400">{item.unit}</span>
                   </td>
                   {showReconciliation && (
                     <>
                       <td className="px-4 py-3 text-right font-semibold text-emerald-400">
-                        {(item.quantity_delivered || 0).toLocaleString()} {item.unit}
+                        {(item.quantity_delivered || 0).toLocaleString('en-IN')} {item.unit}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-blue-400">
-                        {(item.quantity_billed || 0).toLocaleString()} {item.unit}
+                        {(item.quantity_billed || 0).toLocaleString('en-IN')} {item.unit}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-amber-400">
-                        {(item.quantity_consumed || 0).toLocaleString()} {item.unit}
+                        {(item.quantity_consumed || 0).toLocaleString('en-IN')} {item.unit}
                       </td>
                       <td className="px-4 py-3 text-center">
                         {isOverBilled ? (
@@ -99,7 +99,7 @@ export const BOQTable: React.FC<BOQTableProps> = ({ items, showReconciliation = 
                     </>
                   )}
                   <td className="px-4 py-3 text-right font-semibold text-slate-100">
-                    ${itemTotal.toLocaleString()}
+                    ₹{itemTotal.toLocaleString('en-IN')}
                   </td>
                 </tr>
               );

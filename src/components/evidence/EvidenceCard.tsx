@@ -1,5 +1,6 @@
 import React from 'react';
 import { EvidenceItem } from '../../types/index.ts';
+import { handleImageError, DEFAULT_SITE_PHOTO_URL } from '../../lib/imageUtils.ts';
 import { 
   Camera, 
   FileText, 
@@ -80,6 +81,7 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
           <img
             src={evidence.file_url}
             alt={evidence.file_name}
+            onError={(e) => handleImageError(e, DEFAULT_SITE_PHOTO_URL)}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             loading="lazy"
           />

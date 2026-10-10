@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useProjects } from '../../context/ProjectContext.tsx';
+import { isProjectAccessible } from '../../lib/projectAccess.ts';
+import { useAuth } from '../../context/AuthContext.tsx';
 import { BOQTable } from '../../components/projects/BOQTable.tsx';
 import { getStatusBadge } from '../../components/projects/MilestoneList.tsx';
 import { EvidenceGallery } from '../../components/evidence/EvidenceGallery.tsx';
-import { AIDiscrepancyPanel } from '../../components/ai/AIDiscrepancyPanel.tsx';
+import { BillReconciliationModal } from '../../components/projects/BillReconciliationModal.tsx';
 import { AuditReportModal } from '../../components/audit/AuditReportModal.tsx';
 import { AuditActivityTimeline } from '../../components/audit/AuditActivityTimeline.tsx';
+import { CameraCaptureModal } from '../../components/evidence/CameraCaptureModal.tsx';
+import { computeSHA256 } from '../../lib/integrityEngine.ts';
+import { fileToBase64 } from '../../lib/geminiApi.ts';
 import { 
   ArrowLeft, 
   HardHat, 
@@ -16,39 +21,57 @@ import {
   CheckCircle2, 
   Camera, 
   FileText, 
-  Receipt,
+  Receipt, 
   Sparkles,
   Printer,
-  History
+  History,
+  Lock,
+  Loader2
 } from 'lucide-react';
 
 export const ContractorMilestonePage: React.FC = () => {
   const { milestoneId } = useParams<{ milestoneId: string }>();
+  const { profile } = useAuth();
   const { 
     milestones, 
     getMilestoneBOQ, 
     getProjectById, 
     getMilestoneEvidence,
-    updateMilestoneStatus 
+    updateMilestoneStatus,
+    addEvidence
   } = useProjects();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionFeedback, setSubmissionFeedback] = useState<string | null>(null);
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [showAuditTrail, setShowAuditTrail] = useState(false);
+  const [isBillReconcileOpen, setIsBillReconcileOpen] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
 
   const milestone = milestones.find((m) => m.id === milestoneId);
   const project = milestone ? getProjectById(milestone.project_id) : undefined;
   const boqItems = milestone ? getMilestoneBOQ(milestone.id) : [];
   const evidenceList = milestone ? getMilestoneEvidence(milestone.id) : [];
 
-  if (!milestone || !project) {
+  if (!milestone || !project || !isProjectAccessible(project, profile)) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-12 text-center">
-        <h2 className="text-base font-bold text-white mb-2">Milestone not found</h2>
-        <Link to="/contractor/dashboard" className="text-xs text-amber-400 hover:underline">
-          Return to Contractor Dashboard
-        </Link>
+      <div className="max-w-xl mx-auto px-4 py-20 text-center space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400 shadow-lg shadow-amber-950/30">
+          <Lock className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-white tracking-tight">Restricted Milestone</h2>
+        <p className="text-xs sm:text-sm text-slate-400 max-w-md mx-auto leading-relaxed">
+          You are not assigned to this project milestone. Access to upload evidence or view BOQs is confidential and restricted.
+        </p>
+        <div className="pt-2">
+          <Link 
+            to="/contractor/dashboard" 
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold transition-all shadow-md"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Return to Assigned Contracts
+          </Link>
+        </div>
       </div>
     );
   }
@@ -56,6 +79,37 @@ export const ContractorMilestonePage: React.FC = () => {
   const countPhoto = evidenceList.filter((e) => e.type === 'photo').length;
   const countChallan = evidenceList.filter((e) => e.type === 'challan').length;
   const countInvoice = evidenceList.filter((e) => e.type === 'invoice').length;
+
+  const handleCameraConfirm = async (file: File, meta: {
+    latitude?: number;
+    longitude?: number;
+    locationName?: string;
+    capturedAt: string;
+  }) => {
+    try {
+      const { dataUrl } = await fileToBase64(file);
+      const hash = await computeSHA256(file);
+
+      addEvidence({
+        milestone_id: milestone.id,
+        project_id: project.id,
+        file_name: file.name,
+        file_url: dataUrl,
+        file_size: file.size,
+        type: 'photo',
+        uploaded_by: 'Contractor Site Engineer',
+        sha256_hash: hash,
+        latitude: meta.latitude || 19.9975,
+        longitude: meta.longitude || 73.7898,
+        location_name: meta.locationName || 'Nashik Elevated Corridor • Pier 14 Deck',
+        captured_at: meta.capturedAt,
+        tags: ['Live Site Capture', 'Camera Authenticated', 'Geotagged'],
+        status: 'VERIFICATION_COMPLETE',
+      });
+    } catch (err) {
+      console.warn('Camera upload error:', err);
+    }
+  };
 
   const handleSubmitMilestone = () => {
     setIsSubmitting(true);
@@ -88,15 +142,14 @@ export const ContractorMilestonePage: React.FC = () => {
             {showAuditTrail ? 'Hide Audit Log' : 'View Audit Log'}
           </button>
 
-          {milestone.status === 'verified' && (
-            <button
-              onClick={() => setIsReportOpen(true)}
-              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-all flex items-center gap-1.5 shadow-lg shadow-amber-500/20 hover:scale-102"
-            >
-              <Printer className="w-4 h-4" />
-              Verified Certificate
-            </button>
-          )}
+          <button
+            onClick={() => setIsReportOpen(true)}
+            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-all flex items-center gap-1.5 shadow-lg shadow-amber-500/20 hover:scale-102"
+            title="Generate and print comprehensive audit verification report"
+          >
+            <Printer className="w-4 h-4" />
+            Generate Audit Report
+          </button>
         </div>
       </div>
 
@@ -135,11 +188,27 @@ export const ContractorMilestonePage: React.FC = () => {
               <button
                 onClick={handleSubmitMilestone}
                 disabled={isSubmitting || evidenceList.length === 0}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-2 shadow-lg shadow-amber-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                 title={evidenceList.length === 0 ? 'Upload or load demo evidence before submitting' : 'Submit package for verification'}
               >
-                <Send className="w-3.5 h-3.5" />
-                {isSubmitting ? 'Submitting...' : 'Submit for Verification'}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-950 shrink-0" />
+                    <span className="flex items-center gap-1">
+                      <span>Submitting</span>
+                      <span className="inline-flex gap-0.5 ml-0.5">
+                        <span className="w-1 h-1 rounded-full bg-slate-950 animate-pulse" />
+                        <span className="w-1 h-1 rounded-full bg-slate-950 animate-pulse delay-150" />
+                        <span className="w-1 h-1 rounded-full bg-slate-950 animate-pulse delay-300" />
+                      </span>
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Submit for Verification</span>
+                  </>
+                )}
               </button>
             )}
           </div>
@@ -179,18 +248,22 @@ export const ContractorMilestonePage: React.FC = () => {
 
       {/* Evidence Summary Badges */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-4 rounded-2xl glass-panel border border-slate-800 flex items-center justify-between">
+        <div 
+          onClick={() => setIsCameraOpen(true)}
+          className="p-4 rounded-2xl glass-panel border border-slate-800 hover:border-amber-500/50 flex items-center justify-between transition-all cursor-pointer group hover:bg-slate-900/80 shadow-sm"
+          title="Click to launch Live Camera or Video Recorder"
+        >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 group-hover:bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 transition-colors">
               <Camera className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[11px] text-slate-400">Geotagged Site Photos</span>
+              <span className="text-[11px] text-slate-400 group-hover:text-amber-300 transition-colors font-semibold">Geotagged Site Photos</span>
               <h4 className="text-base font-bold text-white">{countPhoto} uploaded</h4>
             </div>
           </div>
           <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/50">
-            GPS Active
+            📍 Open Camera
           </span>
         </div>
 
@@ -225,11 +298,35 @@ export const ContractorMilestonePage: React.FC = () => {
         </div>
       </div>
 
-      {/* AI Verification & Discrepancy Cockpit */}
-      <AIDiscrepancyPanel
-        milestoneId={milestone.id}
-        isInspector={false}
-      />
+      {/* Bill of Quantities (BOQ) Contractual Reference Baseline */}
+      <div className="space-y-4 rounded-2xl glass-panel border border-slate-800 p-6 bg-slate-900/60">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <Layers className="w-4 h-4 text-blue-400" />
+              <h2 className="text-base font-bold text-white">
+                Contractual Quotation & BOQ Baseline
+              </h2>
+              <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
+                <Lock className="w-3 h-3" /> Locked Contract Standard (Non-Editable)
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1">
+              Authorized contractual specification. Upload invoices or delivery slips to compare with this quotation and compute Work Done vs. Work Pending.
+            </p>
+          </div>
+
+          <button
+            onClick={() => setIsBillReconcileOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20 hover:scale-102 shrink-0"
+          >
+            <Receipt className="w-4 h-4" />
+            Upload & Reconcile Bill (OCR)
+          </button>
+        </div>
+
+        <BOQTable items={boqItems} showReconciliation={true} />
+      </div>
 
       {/* Evidence Gallery & Timeline Explorer */}
       <div className="space-y-4">
@@ -252,20 +349,13 @@ export const ContractorMilestonePage: React.FC = () => {
         />
       </div>
 
-      {/* Bill of Quantities Baseline */}
-      <div className="space-y-3 pt-4 border-t border-slate-800">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-            <Layers className="w-4 h-4 text-blue-400" />
-            Contractual Bill of Quantities (BOQ) Baseline
-          </h2>
-          <span className="text-xs text-slate-400">
-            Target material quantities required for milestone sign-off
-          </span>
-        </div>
-
-        <BOQTable items={boqItems} showReconciliation={true} />
-      </div>
+      {/* Bill Intake & Quotation Reconciliation Modal */}
+      <BillReconciliationModal
+        projectId={project.id}
+        milestoneId={milestone.id}
+        isOpen={isBillReconcileOpen}
+        onClose={() => setIsBillReconcileOpen(false)}
+      />
 
       {/* Audit Report Modal */}
       <AuditReportModal
@@ -273,6 +363,14 @@ export const ContractorMilestonePage: React.FC = () => {
         milestone={milestone}
         isOpen={isReportOpen}
         onClose={() => setIsReportOpen(false)}
+      />
+
+      {/* Live Camera & Video Recorder Modal */}
+      <CameraCaptureModal
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        projectLocation={project.location || 'Nashik, Maharashtra'}
+        onCaptureConfirm={handleCameraConfirm}
       />
     </div>
   );

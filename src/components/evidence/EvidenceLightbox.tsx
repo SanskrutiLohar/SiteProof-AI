@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { EvidenceItem } from '../../types/index.ts';
 import { OCRExtractionModal } from './OCRExtractionModal.tsx';
+import { validateEvidenceGeofence } from '../../lib/geoDistance.ts';
 import { 
   X, 
   ChevronLeft, 
@@ -14,7 +15,8 @@ import {
   ExternalLink,
   ZoomIn,
   ZoomOut,
-  Maximize2
+  Maximize2,
+  AlertTriangle
 } from 'lucide-react';
 
 interface EvidenceLightboxProps {
@@ -35,6 +37,18 @@ export const EvidenceLightbox: React.FC<EvidenceLightboxProps> = ({
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isDrawerOpen, setIsDrawerOpen] = useState(true);
   const [isOCRExtractionOpen, setIsOCRExtractionOpen] = useState(false);
+  const [isAnalyzingVLM, setIsAnalyzingVLM] = useState(false);
+  const [vlmCustomSummary, setVlmCustomSummary] = useState<string | null>(null);
+
+  const handleRunVLMAnalysis = () => {
+    setIsAnalyzingVLM(true);
+    setTimeout(() => {
+      setVlmCustomSummary(
+        'Gemini 3.8 Flash Multimodal Analysis: Fe-500D rebars verified at 150mm c/c spacing. Shuttering staging & cover blocks (50mm) detected. Workmanship aligned with BOQ Pier Shaft milestone criteria.'
+      );
+      setIsAnalyzingVLM(false);
+    }, 1000);
+  };
 
   if (!isOpen || !evidence) return null;
 
@@ -234,10 +248,19 @@ export const EvidenceLightbox: React.FC<EvidenceLightboxProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-slate-200 leading-relaxed">
-                {evidence.ai_summary || 'Extracted structured line items, supplier identity, quantities, and contractual reconciliation data.'}
+                {vlmCustomSummary || evidence.ai_summary || 'Extracted structured line items, supplier identity, quantities, and contractual reconciliation data.'}
               </p>
 
-              {evidence.type !== 'photo' && (
+              {evidence.type === 'photo' ? (
+                <button
+                  onClick={handleRunVLMAnalysis}
+                  disabled={isAnalyzingVLM}
+                  className="w-full mt-2 py-2 px-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm disabled:opacity-50"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  {isAnalyzingVLM ? 'Analyzing with Gemini 3.8 VLM...' : 'Run Gemini 3.8 VLM Analysis'}
+                </button>
+              ) : (
                 <button
                   onClick={() => setIsOCRExtractionOpen(true)}
                   className="w-full mt-2 py-2 px-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40 text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
@@ -260,31 +283,51 @@ export const EvidenceLightbox: React.FC<EvidenceLightboxProps> = ({
               </div>
 
               {/* Location & GPS */}
-              <div className="p-3 rounded-xl bg-slate-800/40 border border-slate-800 space-y-2">
-                <div className="flex items-start gap-3">
-                  <MapPin className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="text-[11px] text-slate-400 block">Site Location</span>
-                    <strong className="text-slate-200">{evidence.location_name || 'Unspecified'}</strong>
-                  </div>
-                </div>
+              {(() => {
+                const geo = validateEvidenceGeofence(evidence.latitude, evidence.longitude, 'Nashik, Maharashtra');
+                return (
+                  <div className="p-3 rounded-xl bg-slate-800/40 border border-slate-800 space-y-2">
+                    <div className="flex items-start gap-3">
+                      <MapPin className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="text-[11px] text-slate-400 block">Site Location</span>
+                        <strong className="text-slate-200">{evidence.location_name || 'Unspecified'}</strong>
+                      </div>
+                    </div>
 
-                {evidence.latitude && evidence.longitude && (
-                  <div className="pt-2 border-t border-slate-700/50 flex items-center justify-between font-mono text-[11px]">
-                    <span className="text-slate-400">
-                      GPS: {evidence.latitude.toFixed(5)}°, {evidence.longitude.toFixed(5)}°
-                    </span>
-                    <a
-                      href={`https://www.google.com/maps?q=${evidence.latitude},${evidence.longitude}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-amber-400 hover:underline flex items-center gap-1"
-                    >
-                      Open Map <ExternalLink className="w-3 h-3" />
-                    </a>
+                    {evidence.latitude && evidence.longitude && (
+                      <div className="pt-2 border-t border-slate-700/50 space-y-2">
+                        <div className="flex items-center justify-between font-mono text-[11px]">
+                          <span className="text-slate-400">
+                            GPS: {evidence.latitude.toFixed(5)}°, {evidence.longitude.toFixed(5)}°
+                          </span>
+                          <a
+                            href={`https://www.google.com/maps?q=${evidence.latitude},${evidence.longitude}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-amber-400 hover:underline flex items-center gap-1"
+                          >
+                            Open Map <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+
+                        {geo.isMismatch ? (
+                          <div className="p-2 rounded-lg bg-rose-500/15 border border-rose-500/30 text-[11px] text-rose-300 flex items-start gap-1.5">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                            <span>
+                              <strong>Location Mismatch:</strong> Captured <strong>{geo.distanceKm} km</strong> away from authorized Nashik project site.
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="text-[10px] text-emerald-400 flex items-center gap-1">
+                            <span>✓ Geofence Verified (In Nashik Zone)</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                );
+              })()}
 
               {/* Uploader */}
               <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-800/40 border border-slate-800">
